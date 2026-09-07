@@ -32,6 +32,13 @@ public partial class OverviewViewModel : ObservableObject
     [ObservableProperty] private bool _showProjectPanel;
     [ObservableProperty] private bool _showEditorPanel;
     [ObservableProperty] private bool _showDraftFollowUps;
+    [ObservableProperty] private bool _isEditingProject;
+    [ObservableProperty] private string _editName = "";
+    [ObservableProperty] private string _editChargeNumber = "";
+    [ObservableProperty] private string _editMaterialNumber = "";
+    [ObservableProperty] private string _editTravelNumber = "";
+    [ObservableProperty] private string _editCustomer = "";
+    [ObservableProperty] private DateTime? _editDueDate;
 
     public OverviewViewModel(ProjectStore store, Action goCreate)
     {
@@ -47,6 +54,49 @@ public partial class OverviewViewModel : ObservableObject
     [RelayCommand]
     private void NewProject() => _goCreate();
 
+    [RelayCommand]
+    private void BeginEditProject()
+    {
+        if (SelectedProject is null) return;
+        EditName = SelectedProject.Name;
+        EditChargeNumber = SelectedProject.ChargeNumber;
+        EditMaterialNumber = SelectedProject.MaterialNumber;
+        EditTravelNumber = SelectedProject.TravelNumber;
+        EditCustomer = SelectedProject.Customer;
+        EditDueDate = SelectedProject.DueDate;
+        IsEditingProject = true;
+    }
+
+    [RelayCommand]
+    private void CancelEditProject() => IsEditingProject = false;
+
+    [RelayCommand]
+    private void SaveProjectInfo()
+    {
+        if (SelectedProject is null) return;
+        var name = EditName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            MessageBox.Show("Project name is required.", "Project information", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        SelectedProject.Name = name;
+        SelectedProject.ChargeNumber = EditChargeNumber.Trim();
+        SelectedProject.MaterialNumber = EditMaterialNumber.Trim();
+        SelectedProject.TravelNumber = EditTravelNumber.Trim();
+        SelectedProject.Customer = EditCustomer.Trim();
+        SelectedProject.DueDate = EditDueDate;
+        _store.UpdateProject(SelectedProject);
+
+        var node = FindNode("project", SelectedProject.Id);
+        if (node is not null)
+            node.Title = name;
+
+        IsEditingProject = false;
+        OnPropertyChanged(nameof(SelectedProject));
+    }
+
     public void SelectNode(TreeItemViewModel? node)
     {
         SelectedNode = node;
@@ -55,6 +105,7 @@ public partial class OverviewViewModel : ObservableObject
         SelectedProject = null;
         SelectedMilestone = null;
         SelectedReport = null;
+        IsEditingProject = false;
 
         if (node is null) return;
 
@@ -80,6 +131,7 @@ public partial class OverviewViewModel : ObservableObject
         var project = (Project)node.Model;
         SelectedProject = project;
         ShowProjectPanel = true;
+        IsEditingProject = false;
         Milestones = new ObservableCollection<MilestoneRow>(
             project.Milestones.Select(m => new MilestoneRow(m)
             {

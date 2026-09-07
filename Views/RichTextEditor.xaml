@@ -75,6 +75,7 @@
                     </StackPanel>
                 </ComboBoxItem>
             </ComboBox>
+            <Button Content="Link" Click="Link_Click" Padding="8,4" Margin="0,0,4,4" ToolTip="Insert a link to a file, folder, or website"/>
             <Button Content="LaTeX" Click="Latex_Click" Padding="8,4" Margin="0,0,4,4" ToolTip="Insert equation"/>
             <Button Content="Image" Click="Image_Click" Padding="8,4" Margin="0,0,4,4"/>
         </WrapPanel>

@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -14,6 +16,8 @@ public partial class RichTextEditor : UserControl
     private bool _syncingToolbar;
     private ResizableMedia? _selectedMedia;
     private bool _keepMediaSelection;
+    private Point _pressPoint;
+    private bool _openingLink;
 
     public RichTextEditor()
     {
@@ -22,6 +26,8 @@ public partial class RichTextEditor : UserControl
         {
             if (Editor is null) return;
             Editor.AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler(Editor_OnPreviewMouseLeftButtonDown), true);
+            Editor.AddHandler(PreviewMouseLeftButtonUpEvent, new MouseButtonEventHandler(Editor_OnPreviewMouseLeftButtonUp), true);
+            Editor.AddHandler(Hyperlink.RequestNavigateEvent, new System.Windows.Navigation.RequestNavigateEventHandler(Editor_OnRequestNavigate));
         };
     }
 
@@ -65,6 +71,7 @@ public partial class RichTextEditor : UserControl
         FlattenMedia(Editor.Document);
         var payload = DocumentCodec.Export(Editor.Document);
         WrapMedia(Editor.Document);
+        StyleHyperlinks(Editor.Document);
         return payload;
     }
 
@@ -74,6 +81,7 @@ public partial class RichTextEditor : UserControl
         Editor.Document = DocumentCodec.CreateDocument();
         DocumentCodec.Import(Editor.Document, package);
         WrapMedia(Editor.Document);
+        StyleHyperlinks(Editor.Document);
         Editor.CaretPosition = Editor.Document.ContentEnd;
     }
 
@@ -87,6 +95,41 @@ public partial class RichTextEditor : UserControl
     private void Numbering_Click(object sender, RoutedEventArgs e) => EditingCommands.ToggleNumbering.Execute(null, Editor);
     private void Undo_Click(object sender, RoutedEventArgs e) => ApplicationCommands.Undo.Execute(null, Editor);
     private void Redo_Click(object sender, RoutedEventArgs e) => ApplicationCommands.Redo.Execute(null, Editor);
+
+    private void Link_Click(object sender, RoutedEventArgs e)
+    {
+        if (Editor is null) return;
+        var existing = FindHyperlink(Editor.Selection.Start) ?? FindHyperlink(Editor.CaretPosition);
+        var display = Editor.Selection.IsEmpty
+            ? existing is null ? "" : new TextRange(existing.ContentStart, existing.ContentEnd).Text
+            : Editor.Selection.Text.Replace("\r\n", " ").Trim();
+        var target = existing is null ? "" : ShellLink.FromHyperlink(existing);
+        if (string.IsNullOrWhiteSpace(target))
+            target = ClipboardLink();
+        if (string.IsNullOrWhiteSpace(display) && !string.IsNullOrWhiteSpace(target))
+            display = ShellLink.DisplayName(target);
+        if (!PromptLink(ref display, ref target, existing is not null, out var remove))
+            return;
+
+        if (remove)
+        {
+            if (existing is not null)
+                RemoveHyperlink(existing);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(target)) return;
+        if (string.IsNullOrWhiteSpace(display))
+            display = ShellLink.DisplayName(target);
+
+        if (existing is not null && Editor.Selection.IsEmpty)
+        {
+            ApplyHyperlink(existing, display, target);
+            return;
+        }
+
+        InsertHyperlink(display, target);
+    }
 
     private void FontSizeBox_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -150,6 +193,7 @@ public partial class RichTextEditor : UserControl
 
     private void Editor_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        _pressPoint = e.GetPosition(Editor);
         var media = FindResizableMedia(e.OriginalSource as DependencyObject);
         if (media is not null)
         {
@@ -376,6 +420,408 @@ public partial class RichTextEditor : UserControl
                     break;
             }
         }
+    }
+
+    private void Editor_OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (Editor is null || e.ChangedButton != MouseButton.Left || e.ClickCount != 1) return;
+        if ((e.GetPosition(Editor) - _pressPoint).Length > 4) return;
+        if (FindResizableMedia(e.OriginalSource as DependencyObject) is not null) return;
+
+        var pointer = Editor.GetPositionFromPoint(e.GetPosition(Editor), snapToText: true);
+        var link = FindHyperlink(pointer)
+            ?? FindHyperlink(pointer?.GetNextInsertionPosition(LogicalDirection.Backward))
+            ?? FindHyperlink(pointer?.GetNextInsertionPosition(LogicalDirection.Forward));
+        if (link is null) return;
+
+        e.Handled = true;
+        OpenHyperlink(link);
+    }
+
+    private void Editor_OnRequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+    {
+        e.Handled = true;
+        if (e.OriginalSource is Hyperlink link)
+            OpenHyperlink(link);
+        else if (e.Uri is not null)
+            ShellLink.Open(e.Uri.ToString());
+    }
+
+    private void InsertHyperlink(string display, string target)
+    {
+        Editor.Focus();
+        var paragraph = FindParagraph(Editor.CaretPosition);
+        if (!Editor.Selection.IsEmpty)
+        {
+            var start = Editor.Selection.Start;
+            Editor.Selection.Text = string.Empty;
+            paragraph = FindParagraph(start) ?? Editor.CaretPosition.Paragraph ?? paragraph;
+        }
+
+        paragraph = EnsureParagraph(paragraph);
+        var link = CreateHyperlink(display, target);
+        InsertInlineAtCaret(paragraph, link);
+
+        if (link.Parent is null)
+            paragraph.Inlines.Add(link);
+
+        EnsureLinkText(link, display);
+        PlaceCaretAfter(link);
+    }
+
+    private Paragraph EnsureParagraph(Paragraph? paragraph)
+    {
+        if (paragraph is not null && IsAttached(paragraph))
+            return paragraph;
+
+        paragraph = FindParagraph(Editor.CaretPosition);
+        if (paragraph is not null)
+            return paragraph;
+
+        paragraph = new Paragraph();
+        Editor.Document.Blocks.Add(paragraph);
+        return paragraph;
+    }
+
+    private static Paragraph? FindParagraph(TextPointer? pointer)
+    {
+        if (pointer is null) return null;
+        if (pointer.Paragraph is not null) return pointer.Paragraph;
+
+        DependencyObject? parent = pointer.Parent as DependencyObject;
+        while (parent is not null)
+        {
+            switch (parent)
+            {
+                case Paragraph paragraph:
+                    return paragraph;
+                case ListItem item when item.Blocks.FirstBlock is Paragraph first:
+                    return first;
+            }
+
+            parent = parent is TextElement text ? text.Parent : LogicalTreeHelper.GetParent(parent);
+        }
+
+        return null;
+    }
+
+    private static bool IsAttached(TextElement element)
+    {
+        DependencyObject? current = element;
+        while (current is not null)
+        {
+            if (current is FlowDocument) return true;
+            current = current is TextElement text ? text.Parent : LogicalTreeHelper.GetParent(current);
+        }
+
+        return false;
+    }
+
+    private static void EnsureLinkText(Hyperlink link, string display)
+    {
+        if (!string.IsNullOrEmpty(new TextRange(link.ContentStart, link.ContentEnd).Text))
+            return;
+        link.Inlines.Clear();
+        link.Inlines.Add(new Run(display));
+        StyleHyperlink(link);
+    }
+
+    private static Hyperlink CreateHyperlink(string display, string target)
+    {
+        var link = new Hyperlink(new Run(display));
+        ShellLink.Apply(link, target);
+        StyleHyperlink(link);
+        return link;
+    }
+
+    private void InsertInlineAtCaret(Paragraph paragraph, Inline inline)
+    {
+        var caret = Editor.CaretPosition;
+        if (caret.Paragraph != paragraph)
+        {
+            paragraph.Inlines.Add(inline);
+            return;
+        }
+
+        if (caret.Parent is Run run && paragraph.Inlines.Contains(run))
+        {
+            var text = run.Text ?? "";
+            var offset = run.ContentStart.GetOffsetToPosition(caret);
+            if (offset < 0) offset = 0;
+            if (offset > text.Length) offset = text.Length;
+
+            var before = text[..offset];
+            var after = text[offset..];
+            if (before.Length == 0 && after.Length == 0)
+            {
+                // Keep the list item's existing run. Removing it hides the new link.
+                paragraph.Inlines.InsertAfter(run, inline);
+                return;
+            }
+
+            run.Text = before;
+            if (before.Length == 0)
+                paragraph.Inlines.InsertBefore(run, inline);
+            else
+                paragraph.Inlines.InsertAfter(run, inline);
+
+            if (after.Length > 0)
+                paragraph.Inlines.InsertAfter(inline, new Run(after));
+            else
+                paragraph.Inlines.InsertAfter(inline, new Run(" "));
+            return;
+        }
+
+        Inline? next = null;
+        foreach (Inline existing in paragraph.Inlines)
+        {
+            if (existing.ContentStart.CompareTo(caret) >= 0)
+            {
+                next = existing;
+                break;
+            }
+        }
+
+        if (next is null)
+            paragraph.Inlines.Add(inline);
+        else
+            paragraph.Inlines.InsertBefore(next, inline);
+
+        if (paragraph.Inlines.LastInline == inline)
+            paragraph.Inlines.Add(new Run(" "));
+    }
+
+    private void PlaceCaretAfter(Inline inline)
+    {
+        if (inline.Parent is not Paragraph paragraph) return;
+        var next = inline.NextInline;
+        if (next is null)
+        {
+            next = new Run(" ");
+            paragraph.Inlines.InsertAfter(inline, next);
+        }
+
+        try
+        {
+            Editor.CaretPosition = next.ContentStart;
+        }
+        catch (ArgumentException)
+        {
+            // Leave the caret where the editor placed it.
+        }
+    }
+
+    private static void ApplyHyperlink(Hyperlink link, string display, string target)
+    {
+        var current = new TextRange(link.ContentStart, link.ContentEnd).Text;
+        if (!string.Equals(current, display, StringComparison.Ordinal))
+        {
+            var range = new TextRange(link.ContentStart, link.ContentEnd);
+            range.Text = display;
+        }
+
+        ShellLink.Apply(link, target);
+        StyleHyperlink(link);
+        EnsureLinkText(link, display);
+    }
+
+    private static void RemoveHyperlink(Hyperlink link)
+    {
+        var text = new TextRange(link.ContentStart, link.ContentEnd).Text;
+        if (link.Parent is not Paragraph paragraph) return;
+        if (!string.IsNullOrEmpty(text))
+            paragraph.Inlines.InsertBefore(link, new Run(text));
+        paragraph.Inlines.Remove(link);
+    }
+
+    private static void StyleHyperlinks(FlowDocument document)
+    {
+        foreach (var block in document.Blocks)
+            StyleHyperlinks(block);
+    }
+
+    private static void StyleHyperlinks(Block block)
+    {
+        switch (block)
+        {
+            case Paragraph paragraph:
+                StyleHyperlinks(paragraph.Inlines);
+                break;
+            case List list:
+                foreach (var item in list.ListItems)
+                foreach (var child in item.Blocks)
+                    StyleHyperlinks(child);
+                break;
+            case Section section:
+                foreach (var child in section.Blocks)
+                    StyleHyperlinks(child);
+                break;
+        }
+    }
+
+    private static void StyleHyperlinks(InlineCollection inlines)
+    {
+        foreach (var inline in inlines)
+        {
+            if (inline is Hyperlink link)
+                StyleHyperlink(link);
+            if (inline is Span span)
+                StyleHyperlinks(span.Inlines);
+        }
+    }
+
+    private static void StyleHyperlink(Hyperlink link)
+    {
+        link.Cursor = Cursors.Hand;
+        link.TextDecorations = TextDecorations.Underline;
+        var brush = new SolidColorBrush(Color.FromRgb(0x1F, 0x4E, 0x79));
+        brush.Freeze();
+        link.Foreground = brush;
+        foreach (var inline in link.Inlines)
+        {
+            if (inline is not Run run) continue;
+            run.Foreground = brush;
+            run.TextDecorations = TextDecorations.Underline;
+        }
+        if (string.IsNullOrWhiteSpace(link.ToolTip as string))
+            link.ToolTip = ShellLink.FromHyperlink(link);
+    }
+
+    private static string ClipboardLink()
+    {
+        try
+        {
+            if (!Clipboard.ContainsText()) return "";
+            var text = Clipboard.GetText().Trim().Trim('"');
+            if (text.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                text.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                text.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ||
+                text.StartsWith(@"\\", StringComparison.Ordinal) ||
+                Path.IsPathRooted(text))
+                return text;
+        }
+        catch
+        {
+            // Clipboard can be locked by another process.
+        }
+
+        return "";
+    }
+
+    private static Hyperlink? FindHyperlink(TextPointer? pointer)
+    {
+        if (pointer is null) return null;
+        if (pointer.Parent is Hyperlink direct) return direct;
+
+        DependencyObject? parent = pointer.Parent as DependencyObject;
+        while (parent is not null)
+        {
+            if (parent is Hyperlink link) return link;
+            parent = parent is TextElement text ? text.Parent : LogicalTreeHelper.GetParent(parent);
+        }
+
+        if (pointer.GetAdjacentElement(LogicalDirection.Forward) is Hyperlink forward) return forward;
+        if (pointer.GetAdjacentElement(LogicalDirection.Backward) is Hyperlink backward) return backward;
+        return null;
+    }
+
+    private void OpenHyperlink(Hyperlink link)
+    {
+        if (_openingLink) return;
+        _openingLink = true;
+        try
+        {
+            ShellLink.Open(ShellLink.FromHyperlink(link));
+        }
+        finally
+        {
+            _openingLink = false;
+        }
+    }
+
+    private static bool PromptLink(ref string display, ref string target, bool editing, out bool remove)
+    {
+        remove = false;
+        var displayBox = new TextBox { Text = display, Margin = new Thickness(0, 0, 0, 8) };
+        var targetBox = new TextBox { Text = target, Margin = new Thickness(0, 0, 0, 8) };
+        var fileButton = new Button { Content = "File...", Padding = new Thickness(10, 4, 10, 4), Margin = new Thickness(0, 0, 8, 0) };
+        var folderButton = new Button { Content = "Folder...", Padding = new Thickness(10, 4, 10, 4) };
+        var browse = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+        browse.Children.Add(fileButton);
+        browse.Children.Add(folderButton);
+
+        var removeFlag = false;
+        var ok = new Button { Content = editing ? "Update" : "Insert", IsDefault = true, MinWidth = 88, Padding = new Thickness(12, 4, 12, 4), Margin = new Thickness(0, 0, 8, 0) };
+        var cancel = new Button { Content = "Cancel", IsCancel = true, MinWidth = 88, Padding = new Thickness(12, 4, 12, 4) };
+        var removeButton = new Button { Content = "Remove", Padding = new Thickness(12, 4, 12, 4), Margin = new Thickness(0, 0, 8, 0), Visibility = editing ? Visibility.Visible : Visibility.Collapsed };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
+        buttons.Children.Add(removeButton);
+        buttons.Children.Add(ok);
+        buttons.Children.Add(cancel);
+
+        var form = new StackPanel { Margin = new Thickness(16) };
+        form.Children.Add(new TextBlock { Text = "Display text", Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0x67, 0x75)) });
+        form.Children.Add(displayBox);
+        form.Children.Add(new TextBlock { Text = "Address", Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0x67, 0x75)) });
+        form.Children.Add(targetBox);
+        form.Children.Add(browse);
+        form.Children.Add(new TextBlock
+        {
+            Text = "Website, local file or folder, or a network path.",
+            Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0x67, 0x75)),
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        form.Children.Add(buttons);
+
+        var win = new Window
+        {
+            Title = "Hyperlink",
+            Content = form,
+            Width = 520,
+            SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+        };
+        if (Application.Current.MainWindow is { IsLoaded: true } owner)
+            win.Owner = owner;
+
+        fileButton.Click += (_, _) =>
+        {
+            var dlg = new OpenFileDialog { Filter = "All files|*.*", Title = "Select a file" };
+            if (dlg.ShowDialog(win) != true) return;
+            targetBox.Text = dlg.FileName;
+            if (string.IsNullOrWhiteSpace(displayBox.Text))
+                displayBox.Text = Path.GetFileName(dlg.FileName);
+        };
+        folderButton.Click += (_, _) =>
+        {
+            var dlg = new OpenFolderDialog { Title = "Select a folder" };
+            if (dlg.ShowDialog(win) != true) return;
+            targetBox.Text = dlg.FolderName;
+            if (string.IsNullOrWhiteSpace(displayBox.Text))
+                displayBox.Text = Path.GetFileName(dlg.FolderName.TrimEnd('\\', '/'));
+        };
+        ok.Click += (_, _) =>
+        {
+            if (string.IsNullOrWhiteSpace(targetBox.Text))
+            {
+                MessageBox.Show(win, "Enter a website, file, or folder address.", "Hyperlink", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            win.DialogResult = true;
+        };
+        removeButton.Click += (_, _) =>
+        {
+            removeFlag = true;
+            win.DialogResult = true;
+        };
+
+        if (win.ShowDialog() != true) return false;
+        remove = removeFlag;
+        display = displayBox.Text.Trim();
+        target = targetBox.Text.Trim();
+        return true;
     }
 
     private static string? Prompt(string title, string defaultValue)

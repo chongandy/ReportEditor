@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using ReportEditor.ViewModels;
 
 namespace ReportEditor.Views;
@@ -63,4 +65,13 @@ public partial class OverviewView
         if (DataContext is OverviewViewModel vm)
             Dispatcher.BeginInvoke(vm.PersistMilestones);
     }
+}
+
+public sealed class InverseBooleanToVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is true ? Visibility.Collapsed : Visibility.Visible;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is Visibility.Collapsed;
 }

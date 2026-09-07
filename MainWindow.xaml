@@ -4,6 +4,7 @@
         xmlns:vm="clr-namespace:ReportEditor.ViewModels"
         xmlns:views="clr-namespace:ReportEditor.Views"
         Title="Report Editor"
+        Icon="pack://application:,,,/Assets/checklist.png"
         Width="1280"
         Height="800"
         WindowStartupLocation="CenterScreen">

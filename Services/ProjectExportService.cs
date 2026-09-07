@@ -24,6 +24,9 @@ public sealed class ExportBlock
     public byte[]? ImageBytes { get; init; }
     public double ImageWidthPx { get; init; }
     public double ImageHeightPx { get; init; }
+    public string? ListMarker { get; set; }
+    public int ListLevel { get; set; }
+    public string? LinkUri { get; set; }
 }
 
 public sealed class ExportReport
@@ -113,23 +116,139 @@ public static class ProjectExportService
         return result;
     }
 
-    private static void CollectBlocks(System.Windows.Documents.Block block, List<ExportBlock> result)
+    private static void CollectBlocks(System.Windows.Documents.Block block, List<ExportBlock> result, int listLevel = 0)
     {
         switch (block)
         {
             case System.Windows.Documents.Paragraph paragraph:
-                CollectInlines(paragraph.Inlines, result);
+                CollectParagraph(paragraph, result, marker: null, listLevel);
                 break;
             case System.Windows.Documents.List list:
-                foreach (var item in list.ListItems)
-                foreach (var child in item.Blocks)
-                    CollectBlocks(child, result);
+                CollectList(list, result, listLevel);
                 break;
             case Section section:
                 foreach (var child in section.Blocks)
-                    CollectBlocks(child, result);
+                    CollectBlocks(child, result, listLevel);
                 break;
         }
+    }
+
+    private static void CollectList(System.Windows.Documents.List list, List<ExportBlock> result, int listLevel)
+    {
+        var index = list.StartIndex;
+        foreach (var item in list.ListItems)
+        {
+            var marker = FormatListMarker(list.MarkerStyle, index);
+            var first = true;
+            foreach (var child in item.Blocks)
+            {
+                switch (child)
+                {
+                    case System.Windows.Documents.Paragraph paragraph:
+                        CollectParagraph(paragraph, result, first ? marker : null, listLevel);
+                        first = false;
+                        break;
+                    case System.Windows.Documents.List nested:
+                        CollectList(nested, result, listLevel + 1);
+                        first = false;
+                        break;
+                    default:
+                        CollectBlocks(child, result, listLevel);
+                        first = false;
+                        break;
+                }
+            }
+
+            if (first)
+                result.Add(new ExportBlock { Text = "", ListMarker = marker, ListLevel = listLevel });
+            index++;
+        }
+    }
+
+    private static void CollectParagraph(System.Windows.Documents.Paragraph paragraph, List<ExportBlock> result, string? marker, int listLevel)
+    {
+        var before = result.Count;
+        CollectInlines(paragraph.Inlines, result);
+        if (result.Count == before)
+        {
+            if (marker is not null)
+                result.Add(new ExportBlock { Text = "", ListMarker = marker, ListLevel = listLevel });
+            return;
+        }
+
+        for (var i = before; i < result.Count; i++)
+        {
+            result[i].ListLevel = Math.Max(result[i].ListLevel, listLevel);
+            if (i == before && marker is not null)
+                result[i].ListMarker = marker;
+        }
+    }
+
+    private static string FormatListMarker(TextMarkerStyle style, int index) => style switch
+    {
+        TextMarkerStyle.Decimal => $"{index}.",
+        TextMarkerStyle.LowerLatin => $"{ToLatin(index, upper: false)}.",
+        TextMarkerStyle.UpperLatin => $"{ToLatin(index, upper: true)}.",
+        TextMarkerStyle.LowerRoman => $"{ToRoman(index).ToLowerInvariant()}.",
+        TextMarkerStyle.UpperRoman => $"{ToRoman(index)}.",
+        TextMarkerStyle.Circle => "○",
+        TextMarkerStyle.Square or TextMarkerStyle.Box => "▪",
+        TextMarkerStyle.None => "",
+        _ => "•",
+    };
+
+    private static string ToLatin(int index, bool upper)
+    {
+        if (index < 1) index = 1;
+        var value = index;
+        var chars = new Stack<char>();
+        while (value > 0)
+        {
+            value--;
+            chars.Push((char)((upper ? 'A' : 'a') + (value % 26)));
+            value /= 26;
+        }
+        return new string(chars.ToArray());
+    }
+
+    private static string ToRoman(int index)
+    {
+        if (index < 1) return index.ToString();
+        var values = new[] { 1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1 };
+        var numerals = new[] { "M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I" };
+        var result = new System.Text.StringBuilder();
+        for (var i = 0; i < values.Length && index > 0; i++)
+        {
+            while (index >= values[i])
+            {
+                result.Append(numerals[i]);
+                index -= values[i];
+            }
+        }
+        return result.ToString();
+    }
+
+    private static void WritePdfText(QuestPDF.Infrastructure.IContainer textItem, ExportBlock block)
+    {
+        var text = FormatBlockText(block);
+        if (!string.IsNullOrWhiteSpace(block.LinkUri) && ShellLink.TryCreateNavigateUri(block.LinkUri, out var uri))
+        {
+            textItem.Text(t =>
+            {
+                t.Hyperlink(text, uri.AbsoluteUri).FontColor(QColors.Blue.Medium).Underline();
+            });
+            return;
+        }
+
+        textItem.Text(text);
+    }
+
+    private static string FormatBlockText(ExportBlock block)
+    {
+        var text = block.Text ?? "";
+        if (string.IsNullOrEmpty(block.ListMarker))
+            return text;
+        return string.IsNullOrEmpty(text) ? block.ListMarker : $"{block.ListMarker} {text}";
     }
 
     private static void CollectInlines(InlineCollection inlines, List<ExportBlock> result)
@@ -151,6 +270,16 @@ public static class ProjectExportService
                     break;
                 case LineBreak:
                     text.AppendLine();
+                    break;
+                case Hyperlink link:
+                    FlushText();
+                    var display = new TextRange(link.ContentStart, link.ContentEnd).Text;
+                    var href = ShellLink.FromHyperlink(link);
+                    result.Add(new ExportBlock
+                    {
+                        Text = string.IsNullOrWhiteSpace(display) ? href : display,
+                        LinkUri = string.IsNullOrWhiteSpace(href) ? null : href,
+                    });
                     break;
                 case Span span:
                     CollectInlines(span.Inlines, result);
@@ -228,8 +357,13 @@ public static class ProjectExportService
                             col.Item().PaddingTop(8).Text(report.Title).SemiBold().FontSize(13);
                             foreach (var block in report.Blocks)
                             {
-                                if (!string.IsNullOrWhiteSpace(block.Text))
-                                    col.Item().Text(block.Text);
+                                if (block.ListMarker is not null || !string.IsNullOrWhiteSpace(block.Text))
+                                {
+                                    var textItem = col.Item();
+                                    if (block.ListMarker is not null || block.ListLevel > 0)
+                                        textItem = textItem.PaddingLeft(12 + block.ListLevel * 16);
+                                    WritePdfText(textItem, block);
+                                }
                                 if (block.ImageBytes is { Length: > 0 })
                                 {
                                     var maxWidth = 450f;
@@ -279,8 +413,8 @@ public static class ProjectExportService
                 body.Append(CreateParagraph(report.Title, "Heading3"));
                 foreach (var block in report.Blocks)
                 {
-                    if (!string.IsNullOrWhiteSpace(block.Text))
-                        body.Append(CreateParagraph(block.Text));
+                    if (block.ListMarker is not null || !string.IsNullOrWhiteSpace(block.Text))
+                        body.Append(CreateParagraph(FormatBlockText(block), listLevel: block.ListMarker is not null || block.ListLevel > 0 ? block.ListLevel : -1, linkUri: block.LinkUri, main: main));
                     if (block.ImageBytes is { Length: > 0 })
                         AppendImage(main, body, block.ImageBytes, block.ImageWidthPx, block.ImageHeightPx);
                 }
@@ -290,10 +424,15 @@ public static class ProjectExportService
         main.Document.Save();
     }
 
-    private static W.Paragraph CreateParagraph(string text, string? styleId = null)
+    private static W.Paragraph CreateParagraph(string text, string? styleId = null, int listLevel = -1, string? linkUri = null, MainDocumentPart? main = null)
     {
         var runProps = new W.RunProperties();
         var paraProps = new W.ParagraphProperties();
+        if (listLevel >= 0)
+        {
+            var left = (listLevel + 1) * 360;
+            paraProps.Indentation = new W.Indentation { Left = left.ToString(), Hanging = "240" };
+        }
 
         switch (styleId)
         {
@@ -314,8 +453,21 @@ public static class ProjectExportService
                 break;
         }
 
-        var run = new W.Run(runProps, new W.Text(text) { Space = SpaceProcessingModeValues.Preserve });
-        var para = new W.Paragraph(paraProps, run);
+        var para = new W.Paragraph(paraProps);
+        if (main is not null &&
+            !string.IsNullOrWhiteSpace(linkUri) &&
+            ShellLink.TryCreateNavigateUri(linkUri, out var uri))
+        {
+            runProps.Color = new W.Color { Val = "1F4E79" };
+            runProps.Underline = new W.Underline { Val = W.UnderlineValues.Single };
+            var run = new W.Run(runProps, new W.Text(text) { Space = SpaceProcessingModeValues.Preserve });
+            var rel = main.AddHyperlinkRelationship(uri, true);
+            para.Append(new W.Hyperlink(run) { Id = rel.Id });
+        }
+        else
+        {
+            para.Append(new W.Run(runProps, new W.Text(text) { Space = SpaceProcessingModeValues.Preserve }));
+        }
         return para;
     }
 

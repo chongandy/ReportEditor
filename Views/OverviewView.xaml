@@ -6,6 +6,7 @@
              xmlns:vm="clr-namespace:ReportEditor.ViewModels">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <views:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVis"/>
     </UserControl.Resources>
     <DockPanel>
         <Border DockPanel.Dock="Top" Background="#1F4E79" Padding="12,10">
@@ -84,8 +85,33 @@
                     <StackPanel Visibility="{Binding ShowProjectPanel, Converter={StaticResource BoolToVis}}">
                         <hc:Card Margin="0,0,0,12">
                             <StackPanel>
-                                <TextBlock Text="Project information" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                <Grid>
+                                <DockPanel Margin="0,0,0,8">
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                        <Button Content="Edit"
+                                                Command="{Binding BeginEditProjectCommand}"
+                                                Visibility="{Binding IsEditingProject, Converter={StaticResource InverseBoolToVis}}"
+                                                MinHeight="28"
+                                                Padding="12,4"
+                                                VerticalContentAlignment="Center"/>
+                                        <Button Content="Save"
+                                                Command="{Binding SaveProjectInfoCommand}"
+                                                Style="{StaticResource ButtonPrimary}"
+                                                Visibility="{Binding IsEditingProject, Converter={StaticResource BoolToVis}}"
+                                                MinHeight="28"
+                                                Padding="12,4"
+                                                Margin="0,0,8,0"
+                                                VerticalContentAlignment="Center"/>
+                                        <Button Content="Cancel"
+                                                Command="{Binding CancelEditProjectCommand}"
+                                                Visibility="{Binding IsEditingProject, Converter={StaticResource BoolToVis}}"
+                                                MinHeight="28"
+                                                Padding="12,4"
+                                                VerticalContentAlignment="Center"/>
+                                    </StackPanel>
+                                    <TextBlock Text="Project information" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                </DockPanel>
+
+                                <Grid Visibility="{Binding IsEditingProject, Converter={StaticResource InverseBoolToVis}}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="160"/>
                                         <ColumnDefinition Width="*"/>
@@ -94,18 +120,41 @@
                                         <RowDefinition/><RowDefinition/><RowDefinition/>
                                         <RowDefinition/><RowDefinition/><RowDefinition/>
                                     </Grid.RowDefinitions>
-                                    <TextBlock Text="Name" Foreground="#5B6775"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding SelectedProject.Name}" FontWeight="SemiBold"/>
-                                    <TextBlock Grid.Row="1" Text="Charge Number" Foreground="#5B6775"/>
-                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedProject.ChargeNumber}"/>
-                                    <TextBlock Grid.Row="2" Text="Material Number" Foreground="#5B6775"/>
-                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedProject.MaterialNumber}"/>
-                                    <TextBlock Grid.Row="3" Text="Travel Number" Foreground="#5B6775"/>
-                                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedProject.TravelNumber}"/>
-                                    <TextBlock Grid.Row="4" Text="Customer" Foreground="#5B6775"/>
-                                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedProject.Customer}"/>
-                                    <TextBlock Grid.Row="5" Text="Project due date" Foreground="#5B6775"/>
-                                    <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedProject.DueDate, StringFormat=d}"/>
+                                    <TextBlock Text="Name" Foreground="#5B6775" Margin="0,4"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding SelectedProject.Name}" FontWeight="SemiBold" Margin="0,4"/>
+                                    <TextBlock Grid.Row="1" Text="Charge Number" Foreground="#5B6775" Margin="0,4"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedProject.ChargeNumber}" Margin="0,4"/>
+                                    <TextBlock Grid.Row="2" Text="Material Number" Foreground="#5B6775" Margin="0,4"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedProject.MaterialNumber}" Margin="0,4"/>
+                                    <TextBlock Grid.Row="3" Text="Travel Number" Foreground="#5B6775" Margin="0,4"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedProject.TravelNumber}" Margin="0,4"/>
+                                    <TextBlock Grid.Row="4" Text="Customer" Foreground="#5B6775" Margin="0,4"/>
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedProject.Customer}" Margin="0,4"/>
+                                    <TextBlock Grid.Row="5" Text="Project due date" Foreground="#5B6775" Margin="0,4"/>
+                                    <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedProject.DueDate, StringFormat=d}" Margin="0,4"/>
+                                </Grid>
+
+                                <Grid Visibility="{Binding IsEditingProject, Converter={StaticResource BoolToVis}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="160"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition/><RowDefinition/><RowDefinition/>
+                                        <RowDefinition/><RowDefinition/><RowDefinition/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Text="Name" Foreground="#5B6775" VerticalAlignment="Center" Margin="0,4"/>
+                                    <hc:TextBox Grid.Column="1" Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}" Margin="0,4"/>
+                                    <TextBlock Grid.Row="1" Text="Charge Number" Foreground="#5B6775" VerticalAlignment="Center" Margin="0,4"/>
+                                    <hc:TextBox Grid.Row="1" Grid.Column="1" Text="{Binding EditChargeNumber, UpdateSourceTrigger=PropertyChanged}" Margin="0,4"/>
+                                    <TextBlock Grid.Row="2" Text="Material Number" Foreground="#5B6775" VerticalAlignment="Center" Margin="0,4"/>
+                                    <hc:TextBox Grid.Row="2" Grid.Column="1" Text="{Binding EditMaterialNumber, UpdateSourceTrigger=PropertyChanged}" Margin="0,4"/>
+                                    <TextBlock Grid.Row="3" Text="Travel Number" Foreground="#5B6775" VerticalAlignment="Center" Margin="0,4"/>
+                                    <hc:TextBox Grid.Row="3" Grid.Column="1" Text="{Binding EditTravelNumber, UpdateSourceTrigger=PropertyChanged}" Margin="0,4"/>
+                                    <TextBlock Grid.Row="4" Text="Customer" Foreground="#5B6775" VerticalAlignment="Center" Margin="0,4"/>
+                                    <hc:TextBox Grid.Row="4" Grid.Column="1" Text="{Binding EditCustomer, UpdateSourceTrigger=PropertyChanged}" Margin="0,4"/>
+                                    <TextBlock Grid.Row="5" Text="Project due date" Foreground="#5B6775" VerticalAlignment="Center" Margin="0,4"/>
+                                    <DatePicker Grid.Row="5" Grid.Column="1" SelectedDate="{Binding EditDueDate}" Margin="0,4" HorizontalAlignment="Left" Width="180"/>
                                 </Grid>
                             </StackPanel>
                         </hc:Card>
