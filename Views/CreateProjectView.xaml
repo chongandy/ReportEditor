@@ -1,0 +1,63 @@
+<UserControl x:Class="ReportEditor.Views.CreateProjectView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:hc="https://handyorg.github.io/handycontrol">
+    <Grid Background="#EEF2F6">
+        <Border Width="520" Padding="28" Background="White" CornerRadius="8"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                Effect="{StaticResource EffectShadow2}">
+            <StackPanel>
+                <TextBlock Text="Create New Project" FontSize="22" FontWeight="SemiBold"/>
+                <TextBlock Text="Create a project folder for daily progression reports."
+                           Foreground="#5B6775" Margin="0,4,0,18"/>
+
+                <hc:TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                            Style="{StaticResource TextBoxExtend}"
+                            hc:InfoElement.Title="Name"
+                            hc:InfoElement.Necessary="True"
+                            Margin="0,0,0,12"/>
+                <hc:TextBox Text="{Binding ChargeNumber, UpdateSourceTrigger=PropertyChanged}"
+                            Style="{StaticResource TextBoxExtend}"
+                            hc:InfoElement.Title="Charge Number"
+                            Margin="0,0,0,12"/>
+                <hc:TextBox Text="{Binding MaterialNumber, UpdateSourceTrigger=PropertyChanged}"
+                            Style="{StaticResource TextBoxExtend}"
+                            hc:InfoElement.Title="Material Number"
+                            Margin="0,0,0,12"/>
+                <hc:TextBox Text="{Binding TravelNumber, UpdateSourceTrigger=PropertyChanged}"
+                            Style="{StaticResource TextBoxExtend}"
+                            hc:InfoElement.Title="Travel Number"
+                            Margin="0,0,0,12"/>
+                <hc:TextBox Text="{Binding Customer, UpdateSourceTrigger=PropertyChanged}"
+                            Style="{StaticResource TextBoxExtend}"
+                            hc:InfoElement.Title="Customer"
+                            Margin="0,0,0,12"/>
+                <hc:DatePicker SelectedDate="{Binding DueDate}"
+                               Style="{StaticResource DatePickerExtend}"
+                               hc:InfoElement.Title="Project due date"
+                               Margin="0,0,0,20"/>
+
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <Button Content="Create"
+                            Command="{Binding CreateCommand}"
+                            Style="{StaticResource ButtonPrimary}"
+                            Margin="0,0,8,0"
+                            MinWidth="110"
+                            MinHeight="40"
+                            Padding="20,10"
+                            FontSize="14"
+                            VerticalContentAlignment="Center"
+                            HorizontalContentAlignment="Center"/>
+                    <Button Content="View projects"
+                            Command="{Binding ViewProjectsCommand}"
+                            MinWidth="130"
+                            MinHeight="40"
+                            Padding="20,10"
+                            FontSize="14"
+                            VerticalContentAlignment="Center"
+                            HorizontalContentAlignment="Center"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

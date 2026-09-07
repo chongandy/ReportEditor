@@ -1,0 +1,279 @@
+<UserControl x:Class="ReportEditor.Views.OverviewView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:hc="https://handyorg.github.io/handycontrol"
+             xmlns:views="clr-namespace:ReportEditor.Views"
+             xmlns:vm="clr-namespace:ReportEditor.ViewModels">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </UserControl.Resources>
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Background="#1F4E79" Padding="12,10">
+            <DockPanel>
+                <Button DockPanel.Dock="Right"
+                        Content="New project"
+                        Command="{Binding NewProjectCommand}"
+                        MinHeight="32"
+                        Padding="14,6"
+                        VerticalContentAlignment="Center"
+                        HorizontalContentAlignment="Center"/>
+                <TextBlock Text="Overview — All Projects" Foreground="White" FontSize="16" FontWeight="SemiBold"
+                           VerticalAlignment="Center"/>
+            </DockPanel>
+        </Border>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="320" MinWidth="180"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="*" MinWidth="280"/>
+            </Grid.ColumnDefinitions>
+
+            <DockPanel Grid.Column="0" Background="#F7F9FC">
+                <TextBlock DockPanel.Dock="Top" Text="Projects" FontWeight="SemiBold" Margin="12,12,12,4"/>
+                <TreeView x:Name="ProjectTree"
+                          ItemsSource="{Binding Tree}"
+                          SelectedItemChanged="ProjectTree_OnSelectedItemChanged"
+                          BorderThickness="0"
+                          Background="Transparent"
+                          Padding="8">
+                    <TreeView.ItemContainerStyle>
+                        <Style TargetType="TreeViewItem">
+                            <Setter Property="IsExpanded" Value="True"/>
+                        </Style>
+                    </TreeView.ItemContainerStyle>
+                    <TreeView.ItemTemplate>
+                        <HierarchicalDataTemplate DataType="{x:Type vm:TreeItemViewModel}" ItemsSource="{Binding Children}">
+                            <TextBlock Text="{Binding Title}" Margin="2" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                <TextBlock.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Export"
+                                                  Visibility="{Binding IsProject, Converter={StaticResource BoolToVis}}">
+                                            <MenuItem Header="PDF"
+                                                      Command="{Binding DataContext.ExportProjectPdfCommand, Source={x:Reference ProjectTree}}"
+                                                      CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                            <MenuItem Header="Word (DOCX)"
+                                                      Command="{Binding DataContext.ExportProjectDocxCommand, Source={x:Reference ProjectTree}}"
+                                                      CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                        </MenuItem>
+                                        <Separator Visibility="{Binding IsProject, Converter={StaticResource BoolToVis}}"/>
+                                        <MenuItem Header="Remove"
+                                                  Visibility="{Binding CanRemove, Converter={StaticResource BoolToVis}}"
+                                                  Command="{Binding DataContext.RemoveReportCommand, Source={x:Reference ProjectTree}}"
+                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                    </ContextMenu>
+                                </TextBlock.ContextMenu>
+                            </TextBlock>
+                        </HierarchicalDataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
+            </DockPanel>
+
+            <GridSplitter Grid.Column="1"
+                          Width="6"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch"
+                          ResizeBehavior="PreviousAndNext"
+                          ResizeDirection="Columns"
+                          Background="#C5CED8"
+                          Cursor="SizeWE"/>
+
+            <ScrollViewer Grid.Column="2" Padding="16" VerticalScrollBarVisibility="Auto">
+                <Grid>
+                    <!-- Project overview -->
+                    <StackPanel Visibility="{Binding ShowProjectPanel, Converter={StaticResource BoolToVis}}">
+                        <hc:Card Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="Project information" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="160"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition/><RowDefinition/><RowDefinition/>
+                                        <RowDefinition/><RowDefinition/><RowDefinition/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Text="Name" Foreground="#5B6775"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding SelectedProject.Name}" FontWeight="SemiBold"/>
+                                    <TextBlock Grid.Row="1" Text="Charge Number" Foreground="#5B6775"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedProject.ChargeNumber}"/>
+                                    <TextBlock Grid.Row="2" Text="Material Number" Foreground="#5B6775"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedProject.MaterialNumber}"/>
+                                    <TextBlock Grid.Row="3" Text="Travel Number" Foreground="#5B6775"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedProject.TravelNumber}"/>
+                                    <TextBlock Grid.Row="4" Text="Customer" Foreground="#5B6775"/>
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedProject.Customer}"/>
+                                    <TextBlock Grid.Row="5" Text="Project due date" Foreground="#5B6775"/>
+                                    <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedProject.DueDate, StringFormat=d}"/>
+                                </Grid>
+                            </StackPanel>
+                        </hc:Card>
+
+                        <hc:Card Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="Milestones" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <DataGrid ItemsSource="{Binding Milestones}"
+                                          AutoGenerateColumns="False"
+                                          CanUserAddRows="False"
+                                          CellEditEnding="MilestoneGrid_OnCellEditEnding">
+                                    <DataGrid.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Remove"
+                                                      Command="{Binding DataContext.RemoveMilestoneCommand, Source={x:Reference ProjectTree}}"
+                                                      CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                        </ContextMenu>
+                                    </DataGrid.ContextMenu>
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="No." Binding="{Binding No}" Width="50" IsReadOnly="True"/>
+                                        <DataGridTextColumn Header="Milestone" Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                                        <DataGridTemplateColumn Header="Due" Width="140">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Due, StringFormat=d}"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                            <DataGridTemplateColumn.CellEditingTemplate>
+                                                <DataTemplate>
+                                                    <DatePicker SelectedDate="{Binding Due, UpdateSourceTrigger=PropertyChanged}"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellEditingTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <Button Content="+ Add milestone" Command="{Binding AddMilestoneCommand}"
+                                        HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </hc:Card>
+
+                        <hc:Card>
+                            <StackPanel>
+                                <TextBlock Text="Follow up" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Text="Tasks collected from submitted reports under this project."
+                                           Foreground="#5B6775" FontSize="12" Margin="0,0,0,8"/>
+                                <DataGrid ItemsSource="{Binding ProjectFollowUps}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="No." Binding="{Binding No}" Width="50"/>
+                                        <DataGridTextColumn Header="Task" Binding="{Binding Task}" Width="*"/>
+                                        <DataGridTextColumn Header="Owner" Binding="{Binding Owner}" Width="140"/>
+                                        <DataGridTextColumn Header="Due" Binding="{Binding Due, StringFormat=d}" Width="120"/>
+                                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="120"/>
+                                        <DataGridTemplateColumn Header="" Width="80">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Button Content="Source"
+                                                            ToolTip="{Binding SourceReportTitle}"
+                                                            Command="{Binding DataContext.OpenSourceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}"
+                                                            Padding="8,2"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTemplateColumn Header="" Width="80">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Button Content="Work"
+                                                            Style="{StaticResource ButtonPrimary}"
+                                                            Command="{Binding DataContext.WorkFollowUpCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}"
+                                                            Padding="8,2"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </StackPanel>
+                        </hc:Card>
+                    </StackPanel>
+
+                    <!-- Report editor -->
+                    <StackPanel Visibility="{Binding ShowEditorPanel, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="Report editor" FontSize="18" FontWeight="SemiBold"/>
+                        <TextBlock Margin="0,0,0,12">
+                            <Run Text="{Binding SelectedProject.Name, Mode=OneWay}"/>
+                            <Run Text=" / "/>
+                            <Run Text="{Binding SelectedMilestone.Name, Mode=OneWay}"/>
+                        </TextBlock>
+                        <hc:TextBox Text="{Binding DraftTitle, UpdateSourceTrigger=PropertyChanged}"
+                                    Style="{StaticResource TextBoxExtend}"
+                                    hc:InfoElement.Title="Report title"
+                                    Margin="0,0,0,12"/>
+                        <hc:Card Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="Write report" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <views:RichTextEditor x:Name="Editor"/>
+                            </StackPanel>
+                        </hc:Card>
+                        <hc:Card Margin="0,0,0,12"
+                                 Visibility="{Binding ShowDraftFollowUps, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock Text="Follow up" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <DataGrid x:Name="DraftFollowUpGrid"
+                                          ItemsSource="{Binding DraftFollowUps}"
+                                          AutoGenerateColumns="False"
+                                          CanUserAddRows="False">
+                                    <DataGrid.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Remove"
+                                                      Command="{Binding DataContext.RemoveDraftFollowUpCommand, Source={x:Reference ProjectTree}}"
+                                                      CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                        </ContextMenu>
+                                    </DataGrid.ContextMenu>
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="No." Binding="{Binding No}" Width="50" IsReadOnly="True"/>
+                                        <DataGridTextColumn Header="Task" Binding="{Binding Task, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                                        <DataGridTextColumn Header="Owner" Binding="{Binding Owner, UpdateSourceTrigger=PropertyChanged}" Width="140"/>
+                                        <DataGridTemplateColumn Header="Due" Width="140">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Due, StringFormat=d}"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                            <DataGridTemplateColumn.CellEditingTemplate>
+                                                <DataTemplate>
+                                                    <DatePicker SelectedDate="{Binding Due, UpdateSourceTrigger=PropertyChanged}"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellEditingTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTemplateColumn Header="Status" Width="140">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <ComboBox ItemsSource="{Binding DataContext.StatusOptions, Source={x:Reference ProjectTree}}"
+                                                              SelectedItem="{Binding Status, UpdateSourceTrigger=PropertyChanged}"
+                                                              IsEditable="False"
+                                                              BorderThickness="0"
+                                                              Background="Transparent"
+                                                              VerticalContentAlignment="Center"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <Button Content="+ Add follow-up" Command="{Binding AddDraftFollowUpCommand}"
+                                        HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </hc:Card>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Submit" Command="{Binding SubmitCommand}"
+                                    Style="{StaticResource ButtonPrimary}"
+                                    MinHeight="40"
+                                    MinWidth="100"
+                                    Padding="20,10"
+                                    Margin="0,0,8,0"
+                                    FontSize="14"
+                                    VerticalContentAlignment="Center"
+                                    HorizontalContentAlignment="Center"/>
+                            <Button Content="Cancel" Command="{Binding CancelCommand}"
+                                    MinHeight="40"
+                                    MinWidth="100"
+                                    Padding="20,10"
+                                    FontSize="14"
+                                    VerticalContentAlignment="Center"
+                                    HorizontalContentAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </ScrollViewer>
+        </Grid>
+    </DockPanel>
+</UserControl>

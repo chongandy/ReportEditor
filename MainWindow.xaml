@@ -1,0 +1,19 @@
+﻿<Window x:Class="ReportEditor.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:ReportEditor.ViewModels"
+        xmlns:views="clr-namespace:ReportEditor.Views"
+        Title="Report Editor"
+        Width="1280"
+        Height="800"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <DataTemplate DataType="{x:Type vm:CreateProjectViewModel}">
+            <views:CreateProjectView/>
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:OverviewViewModel}">
+            <views:OverviewView/>
+        </DataTemplate>
+    </Window.Resources>
+    <ContentControl Content="{Binding CurrentViewModel}"/>
+</Window>

@@ -1,0 +1,40 @@
+<UserControl x:Class="ReportEditor.Views.ResizableMedia"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MinWidth="40"
+             MinHeight="24"
+             Focusable="False"
+             IsHitTestVisible="True"
+             SnapsToDevicePixels="True">
+    <Grid Background="Transparent">
+        <Border x:Name="SelectionChrome"
+                BorderBrush="#1F4E79"
+                BorderThickness="1"
+                Background="Transparent"
+                Visibility="Collapsed"
+                IsHitTestVisible="False"/>
+        <Image x:Name="PartImage"
+               Stretch="Fill"
+               IsHitTestVisible="True"
+               RenderOptions.BitmapScalingMode="HighQuality"/>
+        <Thumb x:Name="ResizeThumb"
+               Width="16"
+               Height="16"
+               Margin="0,0,-2,-2"
+               HorizontalAlignment="Right"
+               VerticalAlignment="Bottom"
+               Cursor="SizeNWSE"
+               Focusable="False"
+               Visibility="Collapsed">
+            <Thumb.Template>
+                <ControlTemplate TargetType="Thumb">
+                    <Border Background="#1F4E79"
+                            BorderBrush="White"
+                            BorderThickness="1"
+                            CornerRadius="1"
+                            IsHitTestVisible="True"/>
+                </ControlTemplate>
+            </Thumb.Template>
+        </Thumb>
+    </Grid>
+</UserControl>
