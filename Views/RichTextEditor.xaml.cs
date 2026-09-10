@@ -28,6 +28,7 @@ public partial class RichTextEditor : UserControl
             Editor.AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler(Editor_OnPreviewMouseLeftButtonDown), true);
             Editor.AddHandler(PreviewMouseLeftButtonUpEvent, new MouseButtonEventHandler(Editor_OnPreviewMouseLeftButtonUp), true);
             Editor.AddHandler(Hyperlink.RequestNavigateEvent, new System.Windows.Navigation.RequestNavigateEventHandler(Editor_OnRequestNavigate));
+            DataObject.AddPastingHandler(Editor, Editor_OnPasting);
         };
     }
 
@@ -321,6 +322,50 @@ public partial class RichTextEditor : UserControl
         {
             MessageBox.Show($"Could not render LaTeX: {ex.Message}", "LaTeX", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private void Editor_OnPasting(object sender, DataObjectPastingEventArgs e)
+    {
+        if (Editor is null || IsReadOnly) return;
+        if (!TryGetPastedImage(e.SourceDataObject, out var image)) return;
+        e.CancelCommand();
+        Dispatcher.BeginInvoke(() => InsertMedia(image, Math.Min(480, image.PixelWidth > 0 ? image.PixelWidth : 320)));
+    }
+
+    private static bool TryGetPastedImage(IDataObject data, out BitmapSource image)
+    {
+        image = null!;
+        try
+        {
+            if (data.GetDataPresent("PNG") && data.GetData("PNG") is Stream png)
+            {
+                using var copy = new MemoryStream();
+                png.Position = 0;
+                png.CopyTo(copy);
+                copy.Position = 0;
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.StreamSource = copy;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                image = bitmap;
+                return true;
+            }
+
+            if (data.GetDataPresent(DataFormats.Bitmap) && data.GetData(DataFormats.Bitmap) is BitmapSource bitmapSource)
+            {
+                image = bitmapSource.Clone();
+                if (image.CanFreeze) image.Freeze();
+                return true;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
+        return false;
     }
 
     private void InsertMedia(ImageSource source, double width)

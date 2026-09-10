@@ -25,9 +25,11 @@
 
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="320" MinWidth="180"/>
+                <ColumnDefinition Width="280" MinWidth="160"/>
                 <ColumnDefinition Width="6"/>
                 <ColumnDefinition Width="*" MinWidth="280"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="360" MinWidth="220"/>
             </Grid.ColumnDefinitions>
 
             <DockPanel Grid.Column="0" Background="#F7F9FC">
@@ -323,6 +325,17 @@
                     </StackPanel>
                 </Grid>
             </ScrollViewer>
+
+            <GridSplitter Grid.Column="3"
+                          Width="6"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch"
+                          ResizeBehavior="PreviousAndNext"
+                          ResizeDirection="Columns"
+                          Background="#C5CED8"
+                          Cursor="SizeWE"/>
+
+            <views:PdfViewerPanel Grid.Column="4"/>
         </Grid>
     </DockPanel>
 </UserControl>
