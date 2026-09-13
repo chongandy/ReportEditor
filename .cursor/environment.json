@@ -1,0 +1,5 @@
+{
+  "name": "ReportEditor (.NET 10 WPF)",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh"
+}
