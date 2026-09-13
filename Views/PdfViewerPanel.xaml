@@ -1,7 +1,8 @@
 <UserControl x:Class="ReportEditor.Views.PdfViewerPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:views="clr-namespace:ReportEditor.Views">
+             xmlns:views="clr-namespace:ReportEditor.Views"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <views:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVis"/>
@@ -16,6 +17,14 @@
                             Padding="12,4"
                             Margin="0,0,8,0"
                             VerticalContentAlignment="Center"/>
+                    <Button Content="Open in Edge"
+                            Click="OpenInEdge_Click"
+                            MinHeight="28"
+                            Padding="12,4"
+                            Margin="0,0,8,0"
+                            VerticalContentAlignment="Center"
+                            ToolTip="Opens Microsoft Edge, which can decrypt Microsoft Office / Purview protected PDFs"
+                            IsEnabled="{Binding HasDocument, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                     <Button Content="Save PDF"
                             Click="SavePdf_Click"
                             MinHeight="28"
@@ -48,70 +57,78 @@
                 BorderThickness="0,0,0,1"
                 Visibility="{Binding HasDocument, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
             <WrapPanel>
-                <Button Content="Highlight"
-                        Click="HighlightTool_Click"
-                        MinHeight="28"
-                        Padding="10,4"
-                        Margin="0,0,6,4"
-                        ToolTip="Drag on the page to highlight"/>
-                <Button Width="22" Height="22" Margin="0,0,4,4" Click="Color_Click" Tag="#F6E05E" ToolTip="Yellow" Background="#F6E05E" BorderBrush="#C5CED8"/>
-                <Button Width="22" Height="22" Margin="0,0,4,4" Click="Color_Click" Tag="#68D391" ToolTip="Green" Background="#68D391" BorderBrush="#C5CED8"/>
-                <Button Width="22" Height="22" Margin="0,0,4,4" Click="Color_Click" Tag="#F687B3" ToolTip="Pink" Background="#F687B3" BorderBrush="#C5CED8"/>
-                <Button Width="22" Height="22" Margin="0,0,4,4" Click="Color_Click" Tag="#63B3ED" ToolTip="Blue" Background="#63B3ED" BorderBrush="#C5CED8"/>
-                <Button Width="22" Height="22" Margin="0,0,8,4" Click="Color_Click" Tag="#F6AD55" ToolTip="Orange" Background="#F6AD55" BorderBrush="#C5CED8"/>
-                <Button Content="Copy image"
-                        Click="CopyTool_Click"
-                        MinHeight="28"
-                        Padding="10,4"
-                        Margin="0,0,6,4"
-                        ToolTip="Drag to copy words, images, or equations as an image"/>
-                <Button Content="Undo highlight"
-                        Click="UndoHighlight_Click"
-                        MinHeight="28"
-                        Padding="10,4"
-                        Margin="0,0,8,4"/>
-                <Button Content="All pages"
-                        Click="AllPages_Click"
-                        MinHeight="28"
-                        Padding="10,4"
-                        Margin="0,0,6,4"/>
-                <Button Content="Previous"
-                        Click="PreviousPage_Click"
-                        MinHeight="28"
-                        Padding="10,4"
-                        Margin="0,0,6,4"
-                        IsEnabled="{Binding CanGoPrevious, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-                <Button Content="Next"
-                        Click="NextPage_Click"
-                        MinHeight="28"
-                        Padding="10,4"
-                        Margin="0,0,8,4"
-                        IsEnabled="{Binding CanGoNext, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                <StackPanel Orientation="Horizontal"
+                            Visibility="{Binding UsesEdgeViewer, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}">
+                    <Button Content="Highlight"
+                            Click="HighlightTool_Click"
+                            MinHeight="28"
+                            Padding="10,4"
+                            Margin="0,0,6,4"
+                            ToolTip="Drag on the page to highlight"/>
+                    <Button Width="22" Height="22" Margin="0,0,4,4" Click="Color_Click" Tag="#F6E05E" ToolTip="Yellow" Background="#F6E05E" BorderBrush="#C5CED8"/>
+                    <Button Width="22" Height="22" Margin="0,0,4,4" Click="Color_Click" Tag="#68D391" ToolTip="Green" Background="#68D391" BorderBrush="#C5CED8"/>
+                    <Button Width="22" Height="22" Margin="0,0,4,4" Click="Color_Click" Tag="#F687B3" ToolTip="Pink" Background="#F687B3" BorderBrush="#C5CED8"/>
+                    <Button Width="22" Height="22" Margin="0,0,4,4" Click="Color_Click" Tag="#63B3ED" ToolTip="Blue" Background="#63B3ED" BorderBrush="#C5CED8"/>
+                    <Button Width="22" Height="22" Margin="0,0,8,4" Click="Color_Click" Tag="#F6AD55" ToolTip="Orange" Background="#F6AD55" BorderBrush="#C5CED8"/>
+                    <Button Content="Copy image"
+                            Click="CopyTool_Click"
+                            MinHeight="28"
+                            Padding="10,4"
+                            Margin="0,0,6,4"
+                            ToolTip="Drag to copy words, images, or equations as an image"/>
+                    <Button Content="Undo highlight"
+                            Click="UndoHighlight_Click"
+                            MinHeight="28"
+                            Padding="10,4"
+                            Margin="0,0,8,4"/>
+                    <Button Content="All pages"
+                            Click="AllPages_Click"
+                            MinHeight="28"
+                            Padding="10,4"
+                            Margin="0,0,6,4"/>
+                    <Button Content="Previous"
+                            Click="PreviousPage_Click"
+                            MinHeight="28"
+                            Padding="10,4"
+                            Margin="0,0,6,4"
+                            IsEnabled="{Binding CanGoPrevious, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                    <Button Content="Next"
+                            Click="NextPage_Click"
+                            MinHeight="28"
+                            Padding="10,4"
+                            Margin="0,0,8,4"
+                            IsEnabled="{Binding CanGoNext, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                </StackPanel>
                 <TextBlock VerticalAlignment="Center"
                            Foreground="#5B6775"
                            Text="{Binding ToolStatus, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
             </WrapPanel>
         </Border>
 
-        <ScrollViewer x:Name="PageScroller"
-                      VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Auto"
-                      Padding="12"
-                      Background="#EEF2F6">
-            <StackPanel>
-                <TextBlock Text="Open a PDF to view pages here."
-                           Foreground="#5B6775"
-                           HorizontalAlignment="Center"
-                           Margin="0,40,0,0"
-                           Visibility="{Binding HasDocument, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}"/>
-                <ItemsControl ItemsSource="{Binding Pages, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <views:PdfPageSurface Margin="0,0,0,12"/>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
-        </ScrollViewer>
+        <Grid>
+            <ScrollViewer x:Name="PageScroller"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Auto"
+                          Padding="12"
+                          Background="#EEF2F6"
+                          Visibility="{Binding UsesEdgeViewer, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}">
+                <StackPanel>
+                    <TextBlock Text="Open a PDF to view pages here."
+                               Foreground="#5B6775"
+                               HorizontalAlignment="Center"
+                               Margin="0,40,0,0"
+                               Visibility="{Binding HasDocument, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}"/>
+                    <ItemsControl ItemsSource="{Binding Pages, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <views:PdfPageSurface Margin="0,0,0,12"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+            <wv2:WebView2 x:Name="EdgePdf"
+                          Visibility="{Binding UsesEdgeViewer, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}"/>
+        </Grid>
     </DockPanel>
 </UserControl>

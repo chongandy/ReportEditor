@@ -382,6 +382,22 @@ public static class ProjectExportService
                 });
             });
         }).GeneratePdf(path);
+        NormalizeIfNeeded(path);
+    }
+
+    public static void NormalizeIfNeeded(string path)
+    {
+        try
+        {
+            var temp = path + ".norm.pdf";
+            DocumentOperation.LoadFile(path).Decrypt().RemoveRestrictions().Save(temp);
+            File.Copy(temp, path, overwrite: true);
+            File.Delete(temp);
+        }
+        catch
+        {
+            // Unencrypted or qpdf-unavailable exports still open as written.
+        }
     }
 
     public static void ExportDocx(ExportProjectDocument model, string path)

@@ -6,10 +6,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using PDFtoImage;
 using QuestPDF.Fluent;
 using QuestPDF.Infrastructure;
+using ReportEditor.Services;
 using SkiaSharp;
 
 namespace ReportEditor.Views;
@@ -51,6 +53,8 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
     private int _currentPage;
     private int _pageCount;
     private bool _showAllPages = true;
+    private bool _usesEdgeViewer;
+    private bool _edgeReady;
 
     public PdfViewerPanel()
     {
@@ -91,15 +95,29 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
 
     public bool HasDocument => _pdfBytes is { Length: > 0 };
 
-    public bool CanGoPrevious => HasDocument && !_showAllPages && _currentPage > 0;
+    public bool CanGoPrevious => HasDocument && !UsesEdgeViewer && !_showAllPages && _currentPage > 0;
 
-    public bool CanGoNext => HasDocument && (_showAllPages || _currentPage < _pageCount - 1);
+    public bool CanGoNext => HasDocument && !UsesEdgeViewer && (_showAllPages || _currentPage < _pageCount - 1);
+
+    public bool UsesEdgeViewer
+    {
+        get => _usesEdgeViewer;
+        private set
+        {
+            if (!SetField(ref _usesEdgeViewer, value)) return;
+            OnPropertyChanged(nameof(CanGoPrevious));
+            OnPropertyChanged(nameof(CanGoNext));
+            OnPropertyChanged(nameof(ToolStatus));
+        }
+    }
 
     public string ToolStatus
     {
         get
         {
             if (!HasDocument) return "";
+            if (UsesEdgeViewer)
+                return "Microsoft Office / Purview protected PDF · shown with Edge. Sign in to Edge with your work account if prompted.";
             var pages = _showAllPages ? $"All pages · {_pageCount}" : $"Page {_currentPage + 1} of {_pageCount}";
             var tool = ToolMode switch
             {
@@ -113,7 +131,7 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
 
     public string PageStatus => ToolStatus;
 
-    private void OpenPdf_Click(object sender, RoutedEventArgs e)
+    private async void OpenPdf_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new OpenFileDialog
         {
@@ -124,11 +142,24 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
 
         try
         {
-            LoadPdf(dlg.FileName);
+            await LoadPdfAsync(dlg.FileName);
         }
         catch (Exception ex)
         {
             MessageBox.Show($"Could not open PDF:\n{ex.Message}", "PDF viewer", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void OpenInEdge_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_sourcePath) || !File.Exists(_sourcePath)) return;
+        try
+        {
+            ProtectedPdf.OpenInMicrosoftEdge(_sourcePath);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Could not open in Edge:\n{ex.Message}", "PDF viewer", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -148,7 +179,10 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
 
         try
         {
-            SaveAnnotatedPdf(dlg.FileName);
+            if (UsesEdgeViewer)
+                File.Copy(_sourcePath, dlg.FileName, overwrite: true);
+            else
+                SaveAnnotatedPdf(dlg.FileName);
             MessageBox.Show($"Saved to:\n{dlg.FileName}", "PDF viewer", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
@@ -219,19 +253,81 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
         RenderVisiblePages();
     }
 
-    public void LoadPdf(string path)
+    public async Task LoadPdfAsync(string path)
     {
         var bytes = File.ReadAllBytes(path);
         _pdfBytes = bytes;
         _sourcePath = path;
         _highlights.Clear();
-        _pageCount = Math.Max(1, Conversion.GetPageCount(bytes));
+        _pages.Clear();
         _currentPage = 0;
         _showAllPages = true;
         FileName = Path.GetFileName(path);
         ToolMode = PdfToolMode.Highlight;
-        RenderVisiblePages();
+
+        var protectedByOffice = ProtectedPdf.LooksMicrosoftProtected(bytes);
+        if (!protectedByOffice && TryRasterize(bytes, out var pageCount, out _))
+        {
+            UsesEdgeViewer = false;
+            _pageCount = pageCount;
+            RenderVisiblePages();
+            RaiseDocumentState();
+            return;
+        }
+
+        UsesEdgeViewer = true;
+        _pageCount = 1;
         RaiseDocumentState();
+        await ShowInEdgeViewerAsync(path);
+    }
+
+    private async Task ShowInEdgeViewerAsync(string path)
+    {
+        try
+        {
+            if (!_edgeReady)
+            {
+                var userData = Path.Combine(Path.GetTempPath(), "ReportEditor", "WebView2");
+                Directory.CreateDirectory(userData);
+                var env = await CoreWebView2Environment.CreateAsync(null, userData);
+                await EdgePdf.EnsureCoreWebView2Async(env);
+                _edgeReady = true;
+            }
+
+            EdgePdf.CoreWebView2.Navigate(new Uri(Path.GetFullPath(path)).AbsoluteUri);
+        }
+        catch (Exception ex)
+        {
+            ProtectedPdf.OpenInMicrosoftEdge(path);
+            MessageBox.Show(
+                "Opened this Microsoft-protected PDF in Microsoft Edge, which can decrypt Office / Purview files when you are signed in with a work account.\n\n" + ex.Message,
+                "PDF viewer",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+    }
+
+    private static bool TryRasterize(byte[] bytes, out int pageCount, out string error)
+    {
+        pageCount = 0;
+        error = "";
+        try
+        {
+            pageCount = Conversion.GetPageCount(bytes);
+            if (pageCount < 1)
+            {
+                error = "The PDF has no pages.";
+                return false;
+            }
+
+            using var probe = Conversion.ToImage(bytes, page: 0, options: new PDFtoImage.RenderOptions { Dpi = 72 });
+            return probe is { Width: > 0 };
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
     }
 
     public void Clear()
@@ -243,6 +339,9 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
         _highlights.Clear();
         FileName = "No PDF opened";
         _pages.Clear();
+        UsesEdgeViewer = false;
+        if (_edgeReady && EdgePdf?.CoreWebView2 is not null)
+            EdgePdf.CoreWebView2.Navigate("about:blank");
         RaiseDocumentState();
     }
 
@@ -328,6 +427,7 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
                 });
             }
         }).GeneratePdf(path);
+        ProjectExportService.NormalizeIfNeeded(path);
     }
 
     private static BitmapSource ComposePage(PdfPageView page)
@@ -418,11 +518,12 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
         OnPropertyChanged(nameof(ToolStatus));
     }
 
-    private void SetField<T>(ref T field, T value, [CallerMemberName] string? name = null)
+    private bool SetField<T>(ref T field, T value, [CallerMemberName] string? name = null)
     {
-        if (Equals(field, value)) return;
+        if (Equals(field, value)) return false;
         field = value;
         OnPropertyChanged(name);
+        return true;
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
