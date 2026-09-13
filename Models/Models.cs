@@ -48,5 +48,6 @@ public class FollowUpItem
     public string WorkReportId { get; set; } = "";
 }
 
+[JsonSourceGenerationOptions(WriteIndented = true)]
 [JsonSerializable(typeof(List<Project>))]
 internal partial class ProjectJsonContext : JsonSerializerContext;

@@ -39,11 +39,13 @@ public partial class OverviewViewModel : ObservableObject
     [ObservableProperty] private string _editTravelNumber = "";
     [ObservableProperty] private string _editCustomer = "";
     [ObservableProperty] private DateTime? _editDueDate;
+    [ObservableProperty] private string _workspacePath = "";
 
     public OverviewViewModel(ProjectStore store, Action goCreate)
     {
         _store = store;
         _goCreate = goCreate;
+        WorkspacePath = _store.FilePath;
         RebuildTree();
         if (Tree.Count > 0)
             SelectNode(Tree[0]);
@@ -53,6 +55,37 @@ public partial class OverviewViewModel : ObservableObject
 
     [RelayCommand]
     private void NewProject() => _goCreate();
+
+    [RelayCommand]
+    private void CreateWorkspace()
+    {
+        if (!WorkspaceFiles.Create(_store)) return;
+        ReloadWorkspace();
+    }
+
+    [RelayCommand]
+    private void OpenWorkspace()
+    {
+        if (!WorkspaceFiles.Open(_store)) return;
+        ReloadWorkspace();
+    }
+
+    [RelayCommand]
+    private void SaveWorkspaceAs()
+    {
+        if (!WorkspaceFiles.SaveAs(_store)) return;
+        WorkspacePath = _store.FilePath;
+    }
+
+    private void ReloadWorkspace()
+    {
+        WorkspacePath = _store.FilePath;
+        RebuildTree();
+        if (Tree.Count > 0)
+            SelectNode(Tree[0]);
+        else
+            SelectNode(null);
+    }
 
     [RelayCommand]
     private void BeginEditProject()

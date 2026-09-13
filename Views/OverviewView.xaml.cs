@@ -54,6 +54,22 @@ public partial class OverviewView
 
     private string ExportEditor() => Editor is null ? "" : Editor.Export();
 
+    private double _pdfColumnWidth = 360;
+
+    private void PdfExpander_OnCollapsed(object sender, RoutedEventArgs e)
+    {
+        if (PdfColumn.ActualWidth > 48)
+            _pdfColumnWidth = PdfColumn.ActualWidth;
+        PdfColumn.MinWidth = 32;
+        PdfColumn.Width = GridLength.Auto;
+    }
+
+    private void PdfExpander_OnExpanded(object sender, RoutedEventArgs e)
+    {
+        PdfColumn.MinWidth = 220;
+        PdfColumn.Width = new GridLength(Math.Max(220, _pdfColumnWidth));
+    }
+
     private void ProjectTree_OnSelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         if (DataContext is OverviewViewModel vm && e.NewValue is TreeItemViewModel node)

@@ -43,4 +43,21 @@ public partial class CreateProjectViewModel : ObservableObject
 
     [RelayCommand]
     private void ViewProjects() => _goOverview();
+
+    [RelayCommand]
+    private void CreateWorkspace()
+    {
+        if (!WorkspaceFiles.Create(_store)) return;
+        _goOverview();
+    }
+
+    [RelayCommand]
+    private void OpenWorkspace()
+    {
+        if (!WorkspaceFiles.Open(_store)) return;
+        _goOverview();
+    }
+
+    [RelayCommand]
+    private void SaveWorkspaceAs() => WorkspaceFiles.SaveAs(_store);
 }

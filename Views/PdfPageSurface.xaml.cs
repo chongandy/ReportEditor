@@ -26,7 +26,8 @@ public partial class PdfPageSurface : UserControl
     private void PageHost_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (Host is not { HasDocument: true } host) return;
-        if (host.ToolMode is PdfToolMode.View) return;
+        if (host.ToolMode is PdfToolMode.View or PdfToolMode.Pan) return;
+        PageHost.Cursor = Cursors.Cross;
         _start = e.GetPosition(PageHost);
         _dragging = true;
         PageHost.CaptureMouse();
@@ -37,6 +38,8 @@ public partial class PdfPageSurface : UserControl
 
     private void PageHost_OnMouseMove(object sender, MouseEventArgs e)
     {
+        if (Host is { } host && !_dragging)
+            PageHost.Cursor = host.ToolMode is PdfToolMode.Pan or PdfToolMode.View ? Cursors.SizeAll : Cursors.Cross;
         if (!_dragging || Host is null) return;
         UpdateDraft(e.GetPosition(PageHost));
         e.Handled = true;

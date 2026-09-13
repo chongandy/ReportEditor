@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Web.WebView2.Core;
@@ -19,6 +20,7 @@ namespace ReportEditor.Views;
 public enum PdfToolMode
 {
     View,
+    Pan,
     Highlight,
     Copy,
 }
@@ -55,6 +57,11 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
     private bool _showAllPages = true;
     private bool _usesEdgeViewer;
     private bool _edgeReady;
+    private double _zoom = 1;
+    private bool _panning;
+    private Point _panStart;
+    private double _panOffsetX;
+    private double _panOffsetY;
 
     public PdfViewerPanel()
     {
@@ -123,13 +130,30 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
             {
                 PdfToolMode.Highlight => "Highlight: drag on the page",
                 PdfToolMode.Copy => "Copy image: drag to copy words or equations",
+                PdfToolMode.Pan => "Pan: drag the page",
                 _ => "View",
             };
-            return $"{pages}  ·  {tool}";
+            return $"{pages}  ·  {tool}  ·  {ZoomLabel}";
         }
     }
 
     public string PageStatus => ToolStatus;
+
+    public string ZoomLabel => $"{Zoom * 100:0}%";
+
+    public double Zoom
+    {
+        get => _zoom;
+        private set
+        {
+            var clamped = Math.Clamp(Math.Round(value, 2), 0.25, 4);
+            if (!SetField(ref _zoom, clamped)) return;
+            OnPropertyChanged(nameof(ZoomLabel));
+            OnPropertyChanged(nameof(ToolStatus));
+            if (EdgePdf is not null)
+                EdgePdf.ZoomFactor = clamped;
+        }
+    }
 
     private async void OpenPdf_Click(object sender, RoutedEventArgs e)
     {
@@ -196,6 +220,63 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
     private void HighlightTool_Click(object sender, RoutedEventArgs e) => ToolMode = PdfToolMode.Highlight;
 
     private void CopyTool_Click(object sender, RoutedEventArgs e) => ToolMode = PdfToolMode.Copy;
+
+    private void PanTool_Click(object sender, RoutedEventArgs e) => ToolMode = PdfToolMode.Pan;
+
+    private void ZoomIn_Click(object sender, RoutedEventArgs e) => Zoom = NextZoom(1);
+
+    private void ZoomOut_Click(object sender, RoutedEventArgs e) => Zoom = NextZoom(-1);
+
+    private void ZoomReset_Click(object sender, RoutedEventArgs e) => Zoom = 1;
+
+    private double NextZoom(int direction)
+    {
+        var steps = new[] { 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0 };
+        if (direction > 0)
+            return steps.FirstOrDefault(s => s > Zoom + 0.001, 4);
+        return steps.LastOrDefault(s => s < Zoom - 0.001, 0.25);
+    }
+
+    private void PageScroller_OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (!HasDocument) return;
+        if (Keyboard.Modifiers != ModifierKeys.Control) return;
+        Zoom = NextZoom(e.Delta > 0 ? 1 : -1);
+        e.Handled = true;
+    }
+
+    private void PageScroller_OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!HasDocument || UsesEdgeViewer) return;
+        var pan = ToolMode is PdfToolMode.Pan or PdfToolMode.View && e.ChangedButton == MouseButton.Left
+                  || e.ChangedButton == MouseButton.Middle;
+        if (!pan) return;
+        _panning = true;
+        _panStart = e.GetPosition(PageScroller);
+        _panOffsetX = PageScroller.HorizontalOffset;
+        _panOffsetY = PageScroller.VerticalOffset;
+        PageScroller.CaptureMouse();
+        PageScroller.Cursor = Cursors.SizeAll;
+        e.Handled = true;
+    }
+
+    private void PageScroller_OnPreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_panning) return;
+        var current = e.GetPosition(PageScroller);
+        PageScroller.ScrollToHorizontalOffset(_panOffsetX - (current.X - _panStart.X));
+        PageScroller.ScrollToVerticalOffset(_panOffsetY - (current.Y - _panStart.Y));
+        e.Handled = true;
+    }
+
+    private void PageScroller_OnPreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_panning) return;
+        _panning = false;
+        PageScroller.ReleaseMouseCapture();
+        PageScroller.Cursor = null;
+        e.Handled = true;
+    }
 
     private void Color_Click(object sender, RoutedEventArgs e)
     {
@@ -264,6 +345,7 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
         _showAllPages = true;
         FileName = Path.GetFileName(path);
         ToolMode = PdfToolMode.Highlight;
+        Zoom = 1;
 
         var protectedByOffice = ProtectedPdf.LooksMicrosoftProtected(bytes);
         if (!protectedByOffice && TryRasterize(bytes, out var pageCount, out _))
@@ -295,6 +377,7 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
             }
 
             EdgePdf.CoreWebView2.Navigate(new Uri(Path.GetFullPath(path)).AbsoluteUri);
+            EdgePdf.ZoomFactor = Zoom;
         }
         catch (Exception ex)
         {

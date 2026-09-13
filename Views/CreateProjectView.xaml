@@ -54,8 +54,29 @@
                             MinHeight="40"
                             Padding="20,10"
                             FontSize="14"
+                            Margin="0,0,8,0"
                             VerticalContentAlignment="Center"
                             HorizontalContentAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Text="Project.json backup" Foreground="#5B6775" Margin="0,18,0,8"/>
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="Create JSON"
+                            Command="{Binding CreateWorkspaceCommand}"
+                            MinHeight="32"
+                            Padding="12,6"
+                            Margin="0,0,8,0"
+                            ToolTip="Create a new empty Project.json file"/>
+                    <Button Content="Open"
+                            Command="{Binding OpenWorkspaceCommand}"
+                            MinHeight="32"
+                            Padding="12,6"
+                            Margin="0,0,8,0"
+                            ToolTip="Open a Project.json backup"/>
+                    <Button Content="Save As"
+                            Command="{Binding SaveWorkspaceAsCommand}"
+                            MinHeight="32"
+                            Padding="12,6"
+                            ToolTip="Save a Project.json backup copy"/>
                 </StackPanel>
             </StackPanel>
         </Border>

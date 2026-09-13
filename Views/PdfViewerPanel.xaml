@@ -57,8 +57,33 @@
                 BorderThickness="0,0,0,1"
                 Visibility="{Binding HasDocument, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
             <WrapPanel>
+                <Button Content="Zoom −"
+                        Click="ZoomOut_Click"
+                        MinHeight="28"
+                        Padding="10,4"
+                        Margin="0,0,4,4"
+                        ToolTip="Zoom out (Ctrl+scroll)"/>
+                <Button Content="{Binding ZoomLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        Click="ZoomReset_Click"
+                        MinHeight="28"
+                        MinWidth="56"
+                        Padding="8,4"
+                        Margin="0,0,4,4"
+                        ToolTip="Reset zoom to 100%"/>
+                <Button Content="Zoom +"
+                        Click="ZoomIn_Click"
+                        MinHeight="28"
+                        Padding="10,4"
+                        Margin="0,0,8,4"
+                        ToolTip="Zoom in (Ctrl+scroll)"/>
                 <StackPanel Orientation="Horizontal"
                             Visibility="{Binding UsesEdgeViewer, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}">
+                    <Button Content="Pan"
+                            Click="PanTool_Click"
+                            MinHeight="28"
+                            Padding="10,4"
+                            Margin="0,0,6,4"
+                            ToolTip="Drag the page to pan. Middle-mouse drag also pans."/>
                     <Button Content="Highlight"
                             Click="HighlightTool_Click"
                             MinHeight="28"
@@ -111,8 +136,17 @@
                           HorizontalScrollBarVisibility="Auto"
                           Padding="12"
                           Background="#EEF2F6"
+                          PreviewMouseWheel="PageScroller_OnPreviewMouseWheel"
+                          PreviewMouseDown="PageScroller_OnPreviewMouseDown"
+                          PreviewMouseMove="PageScroller_OnPreviewMouseMove"
+                          PreviewMouseUp="PageScroller_OnPreviewMouseUp"
+                          PreviewMouseLeftButtonUp="PageScroller_OnPreviewMouseUp"
                           Visibility="{Binding UsesEdgeViewer, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}">
                 <StackPanel>
+                    <StackPanel.LayoutTransform>
+                        <ScaleTransform ScaleX="{Binding Zoom, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        ScaleY="{Binding Zoom, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                    </StackPanel.LayoutTransform>
                     <TextBlock Text="Open a PDF to view pages here."
                                Foreground="#5B6775"
                                HorizontalAlignment="Center"

@@ -11,15 +11,39 @@
     <DockPanel>
         <Border DockPanel.Dock="Top" Background="#1F4E79" Padding="12,10">
             <DockPanel>
-                <Button DockPanel.Dock="Right"
-                        Content="New project"
-                        Command="{Binding NewProjectCommand}"
-                        MinHeight="32"
-                        Padding="14,6"
-                        VerticalContentAlignment="Center"
-                        HorizontalContentAlignment="Center"/>
-                <TextBlock Text="Overview — All Projects" Foreground="White" FontSize="16" FontWeight="SemiBold"
-                           VerticalAlignment="Center"/>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="Create"
+                            Command="{Binding CreateWorkspaceCommand}"
+                            MinHeight="32"
+                            Padding="12,6"
+                            Margin="0,0,8,0"
+                            VerticalContentAlignment="Center"
+                            ToolTip="Create a new empty Project.json file"/>
+                    <Button Content="Open"
+                            Command="{Binding OpenWorkspaceCommand}"
+                            MinHeight="32"
+                            Padding="12,6"
+                            Margin="0,0,8,0"
+                            VerticalContentAlignment="Center"
+                            ToolTip="Open a Project.json backup"/>
+                    <Button Content="Save As"
+                            Command="{Binding SaveWorkspaceAsCommand}"
+                            MinHeight="32"
+                            Padding="12,6"
+                            Margin="0,0,8,0"
+                            VerticalContentAlignment="Center"
+                            ToolTip="Save a Project.json backup copy"/>
+                    <Button Content="New project"
+                            Command="{Binding NewProjectCommand}"
+                            MinHeight="32"
+                            Padding="14,6"
+                            VerticalContentAlignment="Center"
+                            HorizontalContentAlignment="Center"/>
+                </StackPanel>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Overview — All Projects" Foreground="White" FontSize="16" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding WorkspacePath}" Foreground="#B8C9DC" FontSize="11" Margin="0,2,8,0" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
             </DockPanel>
         </Border>
 
@@ -29,7 +53,7 @@
                 <ColumnDefinition Width="6"/>
                 <ColumnDefinition Width="*" MinWidth="280"/>
                 <ColumnDefinition Width="6"/>
-                <ColumnDefinition Width="360" MinWidth="220"/>
+                <ColumnDefinition x:Name="PdfColumn" Width="360" MinWidth="220"/>
             </Grid.ColumnDefinitions>
 
             <DockPanel Grid.Column="0" Background="#F7F9FC">
@@ -335,7 +359,23 @@
                           Background="#C5CED8"
                           Cursor="SizeWE"/>
 
-            <views:PdfViewerPanel Grid.Column="4"/>
+            <Expander x:Name="PdfExpander"
+                      Grid.Column="4"
+                      Header="PDF"
+                      ExpandDirection="Left"
+                      IsExpanded="True"
+                      Expanded="PdfExpander_OnExpanded"
+                      Collapsed="PdfExpander_OnCollapsed"
+                      Background="#F7F9FC"
+                      BorderBrush="#D5DDE6"
+                      BorderThickness="1"
+                      Padding="0"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Stretch"
+                      HorizontalContentAlignment="Stretch"
+                      VerticalContentAlignment="Stretch">
+                <views:PdfViewerPanel MinWidth="220"/>
+            </Expander>
         </Grid>
     </DockPanel>
 </UserControl>
