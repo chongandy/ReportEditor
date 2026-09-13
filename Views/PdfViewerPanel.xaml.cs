@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using PDFtoImage;
+using PDFtoImage.Exceptions;
 using QuestPDF.Fluent;
 using QuestPDF.Infrastructure;
 using SkiaSharp;
@@ -44,6 +45,7 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
     private readonly ObservableCollection<PdfPageView> _pages = [];
     private readonly List<PdfHighlight> _highlights = [];
     private byte[]? _pdfBytes;
+    private string? _pdfPassword;
     private string _sourcePath = "";
     private string _fileName = "No PDF opened";
     private string _highlightColor = "#F6E05E";
@@ -222,10 +224,35 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
     public void LoadPdf(string path)
     {
         var bytes = File.ReadAllBytes(path);
+
+        // Protected/encrypted PDFs need a password to decrypt before PDFium can
+        // report the page count or render pages. Prompt (and re-prompt on a wrong
+        // password) until the file opens or the user cancels.
+        string? password = null;
+        int pageCount;
+        while (true)
+        {
+            try
+            {
+                pageCount = Math.Max(1, Conversion.GetPageCount(bytes, password));
+                break;
+            }
+            catch (PdfPasswordProtectedException)
+            {
+                var message = password is null
+                    ? $"\"{Path.GetFileName(path)}\" is password protected. Enter the password to open it."
+                    : "Incorrect password. Please try again.";
+                var entered = PasswordPromptWindow.Prompt(Window.GetWindow(this), message);
+                if (entered is null) return; // user cancelled
+                password = entered;
+            }
+        }
+
         _pdfBytes = bytes;
+        _pdfPassword = password;
         _sourcePath = path;
         _highlights.Clear();
-        _pageCount = Math.Max(1, Conversion.GetPageCount(bytes));
+        _pageCount = pageCount;
         _currentPage = 0;
         _showAllPages = true;
         FileName = Path.GetFileName(path);
@@ -237,6 +264,7 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
     public void Clear()
     {
         _pdfBytes = null;
+        _pdfPassword = null;
         _sourcePath = "";
         _pageCount = 0;
         _currentPage = 0;
@@ -292,7 +320,7 @@ public partial class PdfViewerPanel : UserControl, INotifyPropertyChanged
 
     private PdfPageView RenderPage(int index)
     {
-        using var skBitmap = Conversion.ToImage(_pdfBytes!, page: index, options: new PDFtoImage.RenderOptions
+        using var skBitmap = Conversion.ToImage(_pdfBytes!, page: index, password: _pdfPassword, options: new PDFtoImage.RenderOptions
         {
             Dpi = 144,
         });
