@@ -89,3 +89,68 @@ public partial class FollowUpRow : ObservableObject
         _ => "Open",
     };
 }
+
+public sealed class ProjectOption
+{
+    public string Id { get; init; } = "";
+    public string Name { get; init; } = "";
+
+    public override string ToString() => Name;
+}
+
+public sealed class TodoTaskOption
+{
+    public string Id { get; init; } = "";
+    public string Task { get; init; } = "";
+
+    public override string ToString() =>
+        string.IsNullOrWhiteSpace(Task) ? "(untitled task)" : Task;
+}
+
+public partial class TodoRow : ObservableObject
+{
+    public TodoRow() { }
+
+    public TodoRow(TodoItem item)
+    {
+        Id = item.Id;
+        Task = item.Task;
+        ProjectId = item.ProjectId;
+        Priority = NormalizePriority(item.Priority);
+        DueDate = item.DueDate;
+        Status = NormalizeTodoStatus(item.Status);
+    }
+
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+
+    [ObservableProperty] private string _task = "";
+    [ObservableProperty] private string _projectId = "";
+    [ObservableProperty] private string _priority = "Medium";
+    [ObservableProperty] private DateTime? _dueDate;
+    [ObservableProperty] private string _status = "Open";
+
+    public TodoItem ToModel() => new()
+    {
+        Id = Id,
+        Task = Task,
+        ProjectId = ProjectId,
+        Priority = NormalizePriority(Priority),
+        DueDate = DueDate,
+        Status = NormalizeTodoStatus(Status),
+    };
+
+    private static string NormalizePriority(string? priority) => priority switch
+    {
+        "High" => "High",
+        "Low" => "Low",
+        _ => "Medium",
+    };
+
+    private static string NormalizeTodoStatus(string? status) => status switch
+    {
+        "In-Progress" or "In Progress" => "In Progress",
+        "Pending" => "Pending",
+        "Completed" or "Done" => "Completed",
+        _ => "Open",
+    };
+}

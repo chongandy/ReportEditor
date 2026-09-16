@@ -31,6 +31,7 @@ public class Report
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public string BodyPackageBase64 { get; set; } = "";
     public string? RelatedFollowUpId { get; set; }
+    public string? RelatedTodoId { get; set; }
     public List<FollowUpItem> FollowUps { get; set; } = [];
 }
 
@@ -48,6 +49,24 @@ public class FollowUpItem
     public string WorkReportId { get; set; } = "";
 }
 
+public class TodoItem
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Task { get; set; } = "";
+    public string ProjectId { get; set; } = "";
+    public string Priority { get; set; } = "Medium";
+    public DateTime? DueDate { get; set; }
+    public string Status { get; set; } = "Open";
+}
+
+public class WorkspaceDocument
+{
+    public List<Project> Projects { get; set; } = [];
+    public List<TodoItem> Todos { get; set; } = [];
+}
+
 [JsonSourceGenerationOptions(WriteIndented = true)]
 [JsonSerializable(typeof(List<Project>))]
+[JsonSerializable(typeof(List<TodoItem>))]
+[JsonSerializable(typeof(WorkspaceDocument))]
 internal partial class ProjectJsonContext : JsonSerializerContext;

@@ -105,7 +105,14 @@
                           Background="#C5CED8"
                           Cursor="SizeWE"/>
 
-            <ScrollViewer Grid.Column="2" Padding="16" VerticalScrollBarVisibility="Auto">
+            <Grid x:Name="CenterPanelGrid" Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition x:Name="ContentRow" Height="*" MinHeight="120"/>
+                    <RowDefinition Height="6"/>
+                    <RowDefinition x:Name="TodoRow" Height="220" MinHeight="36"/>
+                </Grid.RowDefinitions>
+
+            <ScrollViewer Grid.Row="0" Padding="16" VerticalScrollBarVisibility="Auto">
                 <Grid>
                     <!-- Project overview -->
                     <StackPanel Visibility="{Binding ShowProjectPanel, Converter={StaticResource BoolToVis}}">
@@ -262,93 +269,265 @@
                     </StackPanel>
 
                     <!-- Report editor -->
-                    <StackPanel Visibility="{Binding ShowEditorPanel, Converter={StaticResource BoolToVis}}">
-                        <TextBlock Text="Report editor" FontSize="18" FontWeight="SemiBold"/>
-                        <TextBlock Margin="0,0,0,12">
-                            <Run Text="{Binding SelectedProject.Name, Mode=OneWay}"/>
-                            <Run Text=" / "/>
-                            <Run Text="{Binding SelectedMilestone.Name, Mode=OneWay}"/>
-                        </TextBlock>
-                        <hc:TextBox Text="{Binding DraftTitle, UpdateSourceTrigger=PropertyChanged}"
-                                    Style="{StaticResource TextBoxExtend}"
-                                    hc:InfoElement.Title="Report title"
-                                    Margin="0,0,0,12"/>
-                        <hc:Card Margin="0,0,0,12">
-                            <StackPanel>
-                                <TextBlock Text="Write report" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                <views:RichTextEditor x:Name="Editor"/>
-                            </StackPanel>
-                        </hc:Card>
-                        <hc:Card Margin="0,0,0,12"
-                                 Visibility="{Binding ShowDraftFollowUps, Converter={StaticResource BoolToVis}}">
-                            <StackPanel>
-                                <TextBlock Text="Follow up" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                <DataGrid x:Name="DraftFollowUpGrid"
-                                          ItemsSource="{Binding DraftFollowUps}"
-                                          AutoGenerateColumns="False"
-                                          CanUserAddRows="False">
-                                    <DataGrid.ContextMenu>
-                                        <ContextMenu>
-                                            <MenuItem Header="Remove"
-                                                      Command="{Binding DataContext.RemoveDraftFollowUpCommand, Source={x:Reference ProjectTree}}"
-                                                      CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
-                                        </ContextMenu>
-                                    </DataGrid.ContextMenu>
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="No." Binding="{Binding No}" Width="50" IsReadOnly="True"/>
-                                        <DataGridTextColumn Header="Task" Binding="{Binding Task, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
-                                        <DataGridTextColumn Header="Owner" Binding="{Binding Owner, UpdateSourceTrigger=PropertyChanged}" Width="140"/>
-                                        <DataGridTemplateColumn Header="Due" Width="140">
-                                            <DataGridTemplateColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <TextBlock Text="{Binding Due, StringFormat=d}"/>
-                                                </DataTemplate>
-                                            </DataGridTemplateColumn.CellTemplate>
-                                            <DataGridTemplateColumn.CellEditingTemplate>
-                                                <DataTemplate>
-                                                    <DatePicker SelectedDate="{Binding Due, UpdateSourceTrigger=PropertyChanged}"/>
-                                                </DataTemplate>
-                                            </DataGridTemplateColumn.CellEditingTemplate>
-                                        </DataGridTemplateColumn>
-                                        <DataGridTemplateColumn Header="Status" Width="140">
-                                            <DataGridTemplateColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <ComboBox ItemsSource="{Binding DataContext.StatusOptions, Source={x:Reference ProjectTree}}"
-                                                              SelectedItem="{Binding Status, UpdateSourceTrigger=PropertyChanged}"
-                                                              IsEditable="False"
-                                                              BorderThickness="0"
-                                                              Background="Transparent"
-                                                              VerticalContentAlignment="Center"/>
-                                                </DataTemplate>
-                                            </DataGridTemplateColumn.CellTemplate>
-                                        </DataGridTemplateColumn>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                                <Button Content="+ Add follow-up" Command="{Binding AddDraftFollowUpCommand}"
-                                        HorizontalAlignment="Left" Margin="0,8,0,0"/>
-                            </StackPanel>
-                        </hc:Card>
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="Submit" Command="{Binding SubmitCommand}"
-                                    Style="{StaticResource ButtonPrimary}"
-                                    MinHeight="40"
-                                    MinWidth="100"
-                                    Padding="20,10"
-                                    Margin="0,0,8,0"
-                                    FontSize="14"
-                                    VerticalContentAlignment="Center"
-                                    HorizontalContentAlignment="Center"/>
-                            <Button Content="Cancel" Command="{Binding CancelCommand}"
-                                    MinHeight="40"
-                                    MinWidth="100"
-                                    Padding="20,10"
-                                    FontSize="14"
-                                    VerticalContentAlignment="Center"
-                                    HorizontalContentAlignment="Center"/>
+                    <DockPanel Visibility="{Binding ShowEditorPanel, Converter={StaticResource BoolToVis}}">
+                        <StackPanel DockPanel.Dock="Top">
+                            <TextBlock Text="Report editor" FontSize="18" FontWeight="SemiBold"/>
+                            <TextBlock Margin="0,0,0,12">
+                                <Run Text="{Binding SelectedProject.Name, Mode=OneWay}"/>
+                                <Run Text=" / "/>
+                                <Run Text="{Binding SelectedMilestone.Name, Mode=OneWay}"/>
+                            </TextBlock>
+                            <hc:TextBox Text="{Binding DraftTitle, UpdateSourceTrigger=PropertyChanged}"
+                                        Style="{StaticResource TextBoxExtend}"
+                                        hc:InfoElement.Title="Report title"
+                                        Margin="0,0,0,12"/>
+                            <TextBlock Text="Linked to-do task" Foreground="#5B6775" Margin="0,0,0,4"/>
+                            <ComboBox ItemsSource="{Binding TodoTaskOptions}"
+                                      SelectedValue="{Binding DraftRelatedTodoId, UpdateSourceTrigger=PropertyChanged}"
+                                      SelectedValuePath="Id"
+                                      DisplayMemberPath="Task"
+                                      IsEditable="False"
+                                      Margin="0,0,0,12"
+                                      MinHeight="32"
+                                      VerticalContentAlignment="Center"
+                                      ToolTip="Choose a task from the To-do List"/>
                         </StackPanel>
-                    </StackPanel>
+                        <StackPanel DockPanel.Dock="Bottom">
+                            <hc:Card Margin="0,0,0,12"
+                                     Visibility="{Binding ShowDraftFollowUps, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="Follow up" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                    <DataGrid x:Name="DraftFollowUpGrid"
+                                              ItemsSource="{Binding DraftFollowUps}"
+                                              AutoGenerateColumns="False"
+                                              CanUserAddRows="False"
+                                              MaxHeight="180"
+                                              VerticalScrollBarVisibility="Auto">
+                                        <DataGrid.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Remove"
+                                                          Command="{Binding DataContext.RemoveDraftFollowUpCommand, Source={x:Reference ProjectTree}}"
+                                                          CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                            </ContextMenu>
+                                        </DataGrid.ContextMenu>
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="No." Binding="{Binding No}" Width="50" IsReadOnly="True"/>
+                                            <DataGridTextColumn Header="Task" Binding="{Binding Task, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                                            <DataGridTextColumn Header="Owner" Binding="{Binding Owner, UpdateSourceTrigger=PropertyChanged}" Width="140"/>
+                                            <DataGridTemplateColumn Header="Due" Width="140">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding Due, StringFormat=d}"/>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                                <DataGridTemplateColumn.CellEditingTemplate>
+                                                    <DataTemplate>
+                                                        <DatePicker SelectedDate="{Binding Due, UpdateSourceTrigger=PropertyChanged}"/>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellEditingTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTemplateColumn Header="Status" Width="140">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <ComboBox ItemsSource="{Binding DataContext.StatusOptions, Source={x:Reference ProjectTree}}"
+                                                                  SelectedItem="{Binding Status, UpdateSourceTrigger=PropertyChanged}"
+                                                                  IsEditable="False"
+                                                                  BorderThickness="0"
+                                                                  Background="Transparent"
+                                                                  VerticalContentAlignment="Center"/>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                    <Button Content="+ Add follow-up" Command="{Binding AddDraftFollowUpCommand}"
+                                            HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </hc:Card>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <Button Content="Submit" Command="{Binding SubmitCommand}"
+                                        Style="{StaticResource ButtonPrimary}"
+                                        MinHeight="40"
+                                        MinWidth="100"
+                                        Padding="20,10"
+                                        Margin="0,0,8,0"
+                                        FontSize="14"
+                                        VerticalContentAlignment="Center"
+                                        HorizontalContentAlignment="Center"/>
+                                <Button Content="Cancel" Command="{Binding CancelCommand}"
+                                        MinHeight="40"
+                                        MinWidth="100"
+                                        Padding="20,10"
+                                        FontSize="14"
+                                        VerticalContentAlignment="Center"
+                                        HorizontalContentAlignment="Center"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <hc:Card Margin="0,0,0,12" MinHeight="280" MaxHeight="420">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Write report" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <views:RichTextEditor x:Name="Editor" VerticalAlignment="Stretch"/>
+                            </DockPanel>
+                        </hc:Card>
+                    </DockPanel>
                 </Grid>
             </ScrollViewer>
+
+                <GridSplitter x:Name="TodoSplitter"
+                              Grid.Row="1"
+                              Height="6"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
+                              ResizeBehavior="PreviousAndNext"
+                              ResizeDirection="Rows"
+                              Background="#C5CED8"
+                              Cursor="SizeNS"
+                              MouseDoubleClick="TodoSplitter_OnMouseDoubleClick"/>
+
+                <Expander x:Name="TodoExpander"
+                          Grid.Row="2"
+                          Header="To-do List"
+                          IsExpanded="True"
+                          ExpandDirection="Down"
+                          Margin="8,0,8,8"
+                          Background="White"
+                          BorderBrush="#D5DDE6"
+                          BorderThickness="1"
+                          Padding="8"
+                          HorizontalContentAlignment="Stretch"
+                          VerticalContentAlignment="Stretch"
+                          Expanded="TodoExpander_OnExpanded"
+                          Collapsed="TodoExpander_OnCollapsed">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Content="+ Add to-do"
+                                    Command="{Binding AddTodoItemCommand}"
+                                    HorizontalAlignment="Left"
+                                    MinHeight="28"
+                                    Padding="12,4"
+                                    Margin="0,0,8,0"/>
+                            <Button Content="Remove"
+                                    Command="{Binding RemoveSelectedTodoCommand}"
+                                    HorizontalAlignment="Left"
+                                    MinHeight="28"
+                                    Padding="12,4"/>
+                        </StackPanel>
+                        <DataGrid x:Name="TodoGrid"
+                                  ItemsSource="{Binding TodoItems}"
+                                  SelectedItem="{Binding SelectedTodoItem, UpdateSourceTrigger=PropertyChanged}"
+                                  AutoGenerateColumns="False"
+                                  CanUserAddRows="False"
+                                  HeadersVisibility="Column"
+                                  MinHeight="80"
+                                  VerticalScrollBarVisibility="Auto">
+                            <DataGrid.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Remove"
+                                              Command="{Binding DataContext.RemoveTodoItemCommand, Source={x:Reference ProjectTree}}"
+                                              CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                </ContextMenu>
+                            </DataGrid.ContextMenu>
+                            <DataGrid.Resources>
+                                <Style x:Key="PriorityComboStyle" TargetType="ComboBox">
+                                    <Setter Property="Padding" Value="6,2"/>
+                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Priority}" Value="High">
+                                            <Setter Property="Background" Value="#E53E3E"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Priority}" Value="Medium">
+                                            <Setter Property="Background" Value="#DD6B20"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Priority}" Value="Low">
+                                            <Setter Property="Background" Value="#38A169"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                                <Style x:Key="PriorityItemStyle" TargetType="ComboBoxItem">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding}" Value="High">
+                                            <Setter Property="Background" Value="#E53E3E"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding}" Value="Medium">
+                                            <Setter Property="Background" Value="#DD6B20"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding}" Value="Low">
+                                            <Setter Property="Background" Value="#38A169"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGrid.Resources>
+                            <DataGrid.Columns>
+                                <DataGridTemplateColumn Header="Task" Width="*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBox Text="{Binding Task, UpdateSourceTrigger=PropertyChanged}"
+                                                     BorderThickness="0"
+                                                     Background="Transparent"
+                                                     VerticalContentAlignment="Center"
+                                                     Padding="4,2"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Project" Width="160">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <ComboBox ItemsSource="{Binding DataContext.ProjectOptions, Source={x:Reference ProjectTree}}"
+                                                      SelectedValue="{Binding ProjectId, UpdateSourceTrigger=PropertyChanged}"
+                                                      SelectedValuePath="Id"
+                                                      DisplayMemberPath="Name"
+                                                      IsEditable="False"
+                                                      BorderThickness="0"
+                                                      Background="Transparent"
+                                                      VerticalContentAlignment="Center"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Priority" Width="110">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <ComboBox ItemsSource="{Binding DataContext.TodoPriorityOptions, Source={x:Reference ProjectTree}}"
+                                                      SelectedItem="{Binding Priority, UpdateSourceTrigger=PropertyChanged}"
+                                                      IsEditable="False"
+                                                      Style="{StaticResource PriorityComboStyle}"
+                                                      ItemContainerStyle="{StaticResource PriorityItemStyle}"
+                                                      VerticalContentAlignment="Center"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Due date" Width="140">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <DatePicker SelectedDate="{Binding DueDate, UpdateSourceTrigger=PropertyChanged}"
+                                                        BorderThickness="0"
+                                                        Background="Transparent"
+                                                        VerticalContentAlignment="Center"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Status" Width="130">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <ComboBox ItemsSource="{Binding DataContext.TodoStatusOptions, Source={x:Reference ProjectTree}}"
+                                                      SelectedItem="{Binding Status, UpdateSourceTrigger=PropertyChanged}"
+                                                      IsEditable="False"
+                                                      BorderThickness="0"
+                                                      Background="Transparent"
+                                                      VerticalContentAlignment="Center"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </Expander>
+            </Grid>
 
             <GridSplitter Grid.Column="3"
                           Width="6"

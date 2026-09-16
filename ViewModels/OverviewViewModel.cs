@@ -19,6 +19,7 @@ public partial class OverviewViewModel : ObservableObject
     private FollowUpRow? _workSeed;
     private string? _pendingRelatedFollowUpId;
     private bool _syncingTitle;
+    private bool _syncingTodos;
 
     [ObservableProperty] private ObservableCollection<TreeItemViewModel> _tree = [];
     [ObservableProperty] private TreeItemViewModel? _selectedNode;
@@ -40,6 +41,11 @@ public partial class OverviewViewModel : ObservableObject
     [ObservableProperty] private string _editCustomer = "";
     [ObservableProperty] private DateTime? _editDueDate;
     [ObservableProperty] private string _workspacePath = "";
+    [ObservableProperty] private ObservableCollection<TodoRow> _todoItems = [];
+    [ObservableProperty] private ObservableCollection<ProjectOption> _projectOptions = [];
+    [ObservableProperty] private ObservableCollection<TodoTaskOption> _todoTaskOptions = [];
+    [ObservableProperty] private TodoRow? _selectedTodoItem;
+    [ObservableProperty] private string? _draftRelatedTodoId;
 
     public OverviewViewModel(ProjectStore store, Action goCreate)
     {
@@ -47,11 +53,14 @@ public partial class OverviewViewModel : ObservableObject
         _goCreate = goCreate;
         WorkspacePath = _store.FilePath;
         RebuildTree();
+        LoadTodos();
         if (Tree.Count > 0)
             SelectNode(Tree[0]);
     }
 
     public IReadOnlyList<string> StatusOptions { get; } = ["Open", "In-Progress", "Completed"];
+    public IReadOnlyList<string> TodoPriorityOptions { get; } = ["High", "Medium", "Low"];
+    public IReadOnlyList<string> TodoStatusOptions { get; } = ["Open", "In Progress", "Pending", "Completed"];
 
     [RelayCommand]
     private void NewProject() => _goCreate();
@@ -81,10 +90,149 @@ public partial class OverviewViewModel : ObservableObject
     {
         WorkspacePath = _store.FilePath;
         RebuildTree();
+        LoadTodos();
         if (Tree.Count > 0)
             SelectNode(Tree[0]);
         else
             SelectNode(null);
+    }
+
+    [RelayCommand]
+    private void AddTodoItem()
+    {
+        var row = new TodoRow
+        {
+            Priority = "Medium",
+            Status = "Open",
+            ProjectId = SelectedProject?.Id ?? ProjectOptions.FirstOrDefault()?.Id ?? "",
+        };
+        WireTodoRow(row);
+        TodoItems.Add(row);
+        SelectedTodoItem = row;
+        PersistTodos();
+        RefreshTodoTaskOptions();
+    }
+
+    [RelayCommand]
+    private void RemoveTodoItem(TodoRow? row)
+    {
+        row ??= SelectedTodoItem;
+        if (row is null) return;
+        var id = row.Id;
+        TodoItems.Remove(row);
+        if (ReferenceEquals(SelectedTodoItem, row))
+            SelectedTodoItem = null;
+        if (DraftRelatedTodoId == id)
+            DraftRelatedTodoId = "";
+        ClearTodoLinks(id);
+        PersistTodos();
+        RefreshTodoTaskOptions();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRemoveSelectedTodo))]
+    private void RemoveSelectedTodo() => RemoveTodoItem(SelectedTodoItem);
+
+    private bool CanRemoveSelectedTodo() => SelectedTodoItem is not null;
+
+    partial void OnSelectedTodoItemChanged(TodoRow? value) =>
+        RemoveSelectedTodoCommand.NotifyCanExecuteChanged();
+
+    public void PersistTodos()
+    {
+        _store.ReplaceTodos(TodoItems.Select(t => t.ToModel()));
+    }
+
+    private void LoadTodos()
+    {
+        foreach (var row in TodoItems)
+            row.PropertyChanged -= OnTodoRowPropertyChanged;
+        TodoItems = new ObservableCollection<TodoRow>(_store.Todos.Select(t =>
+        {
+            var row = new TodoRow(t);
+            WireTodoRow(row);
+            return row;
+        }));
+        SelectedTodoItem = null;
+        RefreshProjectOptions();
+        RefreshTodoTaskOptions();
+    }
+
+    private void WireTodoRow(TodoRow row) => row.PropertyChanged += OnTodoRowPropertyChanged;
+
+    private void OnTodoRowPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_syncingTodos) return;
+        PersistTodos();
+        if (e.PropertyName is nameof(TodoRow.Task) or nameof(TodoRow.Id))
+            RefreshTodoTaskOptions();
+    }
+
+    private void RefreshTodoTaskOptions()
+    {
+        var selected = DraftRelatedTodoId ?? "";
+        var options = new List<TodoTaskOption>
+        {
+            new() { Id = "", Task = "(none)" },
+        };
+        options.AddRange(TodoItems.Select(t => new TodoTaskOption
+        {
+            Id = t.Id,
+            Task = string.IsNullOrWhiteSpace(t.Task) ? "(untitled task)" : t.Task,
+        }));
+        TodoTaskOptions = new ObservableCollection<TodoTaskOption>(options);
+        DraftRelatedTodoId = options.Any(t => t.Id == selected) ? selected : "";
+    }
+
+    private void ClearTodoLinks(string todoId)
+    {
+        foreach (var project in _store.Projects)
+        {
+            var changed = false;
+            foreach (var report in project.Milestones.SelectMany(m => m.Reports))
+            {
+                if (report.RelatedTodoId != todoId) continue;
+                report.RelatedTodoId = null;
+                changed = true;
+            }
+            if (changed)
+                _store.UpdateProject(project);
+        }
+
+        if (SelectedReport?.RelatedTodoId == todoId)
+            SelectedReport.RelatedTodoId = null;
+    }
+
+    private void RefreshProjectOptions()
+    {
+        var options = _store.Projects
+            .Select(p => new ProjectOption
+            {
+                Id = p.Id,
+                Name = string.IsNullOrWhiteSpace(p.Name) ? "Untitled project" : p.Name,
+            })
+            .ToList();
+        ProjectOptions = new ObservableCollection<ProjectOption>(options);
+
+        var validIds = options.Select(o => o.Id).ToHashSet();
+        var changed = false;
+        _syncingTodos = true;
+        try
+        {
+            foreach (var todo in TodoItems)
+            {
+                if (!string.IsNullOrWhiteSpace(todo.ProjectId) && !validIds.Contains(todo.ProjectId))
+                {
+                    todo.ProjectId = "";
+                    changed = true;
+                }
+            }
+        }
+        finally
+        {
+            _syncingTodos = false;
+        }
+        if (changed)
+            PersistTodos();
     }
 
     [RelayCommand]
@@ -128,6 +276,7 @@ public partial class OverviewViewModel : ObservableObject
 
         IsEditingProject = false;
         OnPropertyChanged(nameof(SelectedProject));
+        RefreshProjectOptions();
     }
 
     public void SelectNode(TreeItemViewModel? node)
@@ -211,6 +360,7 @@ public partial class OverviewViewModel : ObservableObject
             _syncingTitle = false;
             DraftFollowUps = [];
             ShowDraftFollowUps = false;
+            DraftRelatedTodoId = "";
             RequestClearEditor?.Invoke();
             RequestAppendEditor?.Invoke(
                 $"Follow-up work for: {(string.IsNullOrWhiteSpace(seed.Task) ? "(untitled task)" : seed.Task)}\n" +
@@ -227,6 +377,7 @@ public partial class OverviewViewModel : ObservableObject
             DraftTitle = $"{DateTime.Now:yyyy-MM-dd} — {(string.IsNullOrWhiteSpace(milestone.Name) ? "Report" : milestone.Name)}";
             DraftFollowUps = [];
             _pendingRelatedFollowUpId = null;
+            DraftRelatedTodoId = "";
             ShowDraftFollowUps = true;
             RequestClearEditor?.Invoke();
         }
@@ -247,6 +398,8 @@ public partial class OverviewViewModel : ObservableObject
         _syncingTitle = true;
         DraftTitle = report.Title;
         _syncingTitle = false;
+        DraftRelatedTodoId = report.RelatedTodoId ?? "";
+        RefreshTodoTaskOptions();
         var isWorkReport = !string.IsNullOrWhiteSpace(report.RelatedFollowUpId);
         ShowDraftFollowUps = !isWorkReport;
         DraftFollowUps = isWorkReport
@@ -494,6 +647,7 @@ public partial class OverviewViewModel : ObservableObject
             report = SelectedReport;
             ApplyReportTitle(report.Id, title);
             report.BodyPackageBase64 = body;
+            report.RelatedTodoId = string.IsNullOrWhiteSpace(DraftRelatedTodoId) ? null : DraftRelatedTodoId;
         }
         else
         {
@@ -502,6 +656,7 @@ public partial class OverviewViewModel : ObservableObject
                 Title = title,
                 BodyPackageBase64 = body,
                 RelatedFollowUpId = _pendingRelatedFollowUpId,
+                RelatedTodoId = string.IsNullOrWhiteSpace(DraftRelatedTodoId) ? null : DraftRelatedTodoId,
             };
             SelectedMilestone.Reports.Add(report);
         }
@@ -535,6 +690,7 @@ public partial class OverviewViewModel : ObservableObject
         _editingMilestoneId = null;
         _pendingRelatedFollowUpId = null;
         _workSeed = null;
+        DraftRelatedTodoId = "";
         RequestClearEditor?.Invoke();
         if (SelectedProject is not null)
         {
@@ -644,6 +800,7 @@ public partial class OverviewViewModel : ObservableObject
 
         _store.RemoveProject(node.Id);
         RebuildTree();
+        RefreshProjectOptions();
         if (Tree.Count > 0)
             SelectNode(Tree[0]);
         else
@@ -815,6 +972,7 @@ public partial class OverviewViewModel : ObservableObject
                 }
                 return pn;
             }));
+        RefreshProjectOptions();
     }
 
     private TreeItemViewModel? FindNode(string kind, string id) => FindNode(Tree, kind, id);

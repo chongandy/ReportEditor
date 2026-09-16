@@ -75,14 +75,24 @@
                     </StackPanel>
                 </ComboBoxItem>
             </ComboBox>
+            <ComboBox x:Name="LineSpacingBox" Width="84" Margin="0,0,4,4" VerticalAlignment="Center"
+                      SelectionChanged="LineSpacingBox_OnSelectionChanged"
+                      ToolTip="Line spacing">
+                <ComboBoxItem Content="1" Tag="1"/>
+                <ComboBoxItem Content="1.25" Tag="1.25"/>
+                <ComboBoxItem Content="1.5" Tag="1.5" IsSelected="True"/>
+                <ComboBoxItem Content="2" Tag="2"/>
+            </ComboBox>
             <Button Content="Link" Click="Link_Click" Padding="8,4" Margin="0,0,4,4" ToolTip="Insert a link to a file, folder, or website"/>
             <Button Content="LaTeX" Click="Latex_Click" Padding="8,4" Margin="0,0,4,4" ToolTip="Insert equation"/>
             <Button Content="Image" Click="Image_Click" Padding="8,4" Margin="0,0,4,4"/>
         </WrapPanel>
-        <Border BorderBrush="#D5DDE6" BorderThickness="1" CornerRadius="4" Padding="8">
+        <Border BorderBrush="#D5DDE6" BorderThickness="1" CornerRadius="4" Padding="12,8,8,8"
+                MinHeight="200">
             <RichTextBox x:Name="Editor"
-                         MinHeight="260"
+                         MinHeight="200"
                          BorderThickness="0"
+                         Padding="4,0,0,0"
                          AcceptsTab="True"
                          IsDocumentEnabled="True"
                          FontFamily="Segoe UI"
@@ -90,6 +100,8 @@
                          Foreground="#1B2430"
                          CaretBrush="#1B2430"
                          VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Disabled"
+                         PreviewMouseWheel="Editor_OnPreviewMouseWheel"
                          SelectionChanged="Editor_OnSelectionChanged"/>
         </Border>
     </DockPanel>

@@ -18,6 +18,8 @@ public partial class RichTextEditor : UserControl
     private bool _keepMediaSelection;
     private Point _pressPoint;
     private bool _openingLink;
+    private double _lineSpacingFactor = DocumentCodec.DefaultLineSpacing;
+    private bool _pendingListFormat;
 
     public RichTextEditor()
     {
@@ -29,6 +31,8 @@ public partial class RichTextEditor : UserControl
             Editor.AddHandler(PreviewMouseLeftButtonUpEvent, new MouseButtonEventHandler(Editor_OnPreviewMouseLeftButtonUp), true);
             Editor.AddHandler(Hyperlink.RequestNavigateEvent, new System.Windows.Navigation.RequestNavigateEventHandler(Editor_OnRequestNavigate));
             DataObject.AddPastingHandler(Editor, Editor_OnPasting);
+            Editor.PreviewKeyDown += Editor_OnPreviewKeyDown;
+            Editor.PreviewKeyUp += Editor_OnPreviewKeyUp;
         };
     }
 
@@ -47,6 +51,7 @@ public partial class RichTextEditor : UserControl
     {
         if (Editor is null) return;
         Editor.Document = DocumentCodec.CreateDocument();
+        ResetLineSpacingToolbar();
     }
 
     public void Append(string text)
@@ -54,12 +59,7 @@ public partial class RichTextEditor : UserControl
         if (Editor is null) return;
         foreach (var line in text.Replace("\r\n", "\n").Split('\n'))
         {
-            Editor.Document.Blocks.Add(new Paragraph(new Run(line)
-            {
-                FontFamily = DocumentCodec.BodyFont,
-                FontSize = DocumentCodec.BodyFontSize,
-                Foreground = DocumentCodec.BodyForeground,
-            }));
+            Editor.Document.Blocks.Add(DocumentCodec.CreateBodyParagraph(line));
         }
         WrapMedia(Editor.Document);
         Editor.CaretPosition = Editor.Document.ContentEnd;
@@ -83,7 +83,33 @@ public partial class RichTextEditor : UserControl
         DocumentCodec.Import(Editor.Document, package);
         WrapMedia(Editor.Document);
         StyleHyperlinks(Editor.Document);
+        ApplyListFormatting(Editor.Document, _lineSpacingFactor);
+        ResetLineSpacingToolbar();
         Editor.CaretPosition = Editor.Document.ContentEnd;
+    }
+
+    private void ResetLineSpacingToolbar()
+    {
+        _lineSpacingFactor = DocumentCodec.DefaultLineSpacing;
+        if (LineSpacingBox is null) return;
+        _syncingToolbar = true;
+        try
+        {
+            foreach (ComboBoxItem item in LineSpacingBox.Items)
+            {
+                if (TryParseLineSpacing(item, out var factor) &&
+                    Math.Abs(factor - DocumentCodec.DefaultLineSpacing) < 0.01)
+                {
+                    LineSpacingBox.SelectedItem = item;
+                    return;
+                }
+            }
+            LineSpacingBox.SelectedIndex = 2;
+        }
+        finally
+        {
+            _syncingToolbar = false;
+        }
     }
 
     private void Bold_Click(object sender, RoutedEventArgs e) => EditingCommands.ToggleBold.Execute(null, Editor);
@@ -92,10 +118,283 @@ public partial class RichTextEditor : UserControl
     private void AlignLeft_Click(object sender, RoutedEventArgs e) => EditingCommands.AlignLeft.Execute(null, Editor);
     private void AlignCenter_Click(object sender, RoutedEventArgs e) => EditingCommands.AlignCenter.Execute(null, Editor);
     private void AlignRight_Click(object sender, RoutedEventArgs e) => EditingCommands.AlignRight.Execute(null, Editor);
-    private void Bullets_Click(object sender, RoutedEventArgs e) => EditingCommands.ToggleBullets.Execute(null, Editor);
-    private void Numbering_Click(object sender, RoutedEventArgs e) => EditingCommands.ToggleNumbering.Execute(null, Editor);
+
+    private void Bullets_Click(object sender, RoutedEventArgs e)
+    {
+        if (Editor is null) return;
+        Editor.Focus();
+        EditingCommands.ToggleBullets.Execute(null, Editor);
+        ScheduleListFormatting();
+    }
+
+    private void Numbering_Click(object sender, RoutedEventArgs e)
+    {
+        if (Editor is null) return;
+        Editor.Focus();
+        EditingCommands.ToggleNumbering.Execute(null, Editor);
+        ScheduleListFormatting();
+    }
+
     private void Undo_Click(object sender, RoutedEventArgs e) => ApplicationCommands.Undo.Execute(null, Editor);
     private void Redo_Click(object sender, RoutedEventArgs e) => ApplicationCommands.Redo.Execute(null, Editor);
+
+    private void Editor_OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Tab || Editor is null || Editor.IsReadOnly || !IsCaretInList())
+            return;
+
+        // Handle indent ourselves and format immediately so the wide default
+        // nested-list gap never paints (avoids Tab flicker).
+        e.Handled = true;
+        if ((Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift)
+            EditingCommands.DecreaseIndentation.Execute(null, Editor);
+        else
+            EditingCommands.IncreaseIndentation.Execute(null, Editor);
+
+        ApplyListFormatting(Editor.Document, _lineSpacingFactor);
+        ApplyLineSpacingToCaret(_lineSpacingFactor);
+    }
+
+    private void Editor_OnPreviewKeyUp(object sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Return or Key.Enter)
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                ApplyLineSpacingToCaret(_lineSpacingFactor);
+                ScheduleListFormatting();
+            }, System.Windows.Threading.DispatcherPriority.Input);
+        }
+    }
+
+    private void ScheduleListFormatting()
+    {
+        if (Editor?.Document is null || _pendingListFormat) return;
+        _pendingListFormat = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            _pendingListFormat = false;
+            if (Editor?.Document is null) return;
+            ApplyListFormatting(Editor.Document, _lineSpacingFactor);
+            ApplyLineSpacingToCaret(_lineSpacingFactor);
+        }, System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    private bool IsCaretInList()
+    {
+        DependencyObject? node = Editor?.CaretPosition?.Paragraph;
+        while (node is not null)
+        {
+            if (node is List or ListItem) return true;
+            node = node is FrameworkContentElement fce
+                ? fce.Parent
+                : LogicalTreeHelper.GetParent(node);
+        }
+        return false;
+    }
+
+    private void LineSpacingBox_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingToolbar || Editor is null || LineSpacingBox.SelectedItem is not ComboBoxItem item) return;
+        if (!TryParseLineSpacing(item, out var factor)) return;
+        _lineSpacingFactor = factor;
+        Editor.Focus();
+        ApplyLineSpacing(factor);
+        ApplyListFormatting(Editor.Document, factor);
+    }
+
+    private static bool TryParseLineSpacing(ComboBoxItem item, out double factor)
+    {
+        factor = DocumentCodec.DefaultLineSpacing;
+        var text = item.Tag?.ToString() ?? item.Content?.ToString();
+        return double.TryParse(text, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out factor) && factor > 0;
+    }
+
+    private void ApplyLineSpacingToCaret(double factor)
+    {
+        if (Editor?.CaretPosition?.Paragraph is not Paragraph paragraph) return;
+        SetParagraphLineSpacing(paragraph, factor);
+    }
+
+    private void ApplyLineSpacing(double factor)
+    {
+        if (Editor?.Document is null) return;
+        var paragraphs = GetTargetParagraphs().ToList();
+        if (paragraphs.Count == 0)
+        {
+            ApplyLineSpacingToCaret(factor);
+            return;
+        }
+
+        foreach (var paragraph in paragraphs)
+            SetParagraphLineSpacing(paragraph, factor);
+    }
+
+    private static void SetParagraphLineSpacing(Paragraph paragraph, double factor, bool addBlockGap = true)
+    {
+        var fontSize = paragraph.FontSize;
+        if (double.IsNaN(fontSize) || fontSize < 1)
+            fontSize = DocumentCodec.BodyFontSize;
+        paragraph.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
+        paragraph.LineHeight = fontSize * factor;
+        var gap = addBlockGap ? Math.Max(0, fontSize * (factor - 1)) : 0;
+        paragraph.Margin = new Thickness(paragraph.Margin.Left, 0, paragraph.Margin.Right, gap);
+    }
+
+    private static void ApplyListFormatting(FlowDocument? document, double factor)
+    {
+        if (document is null) return;
+        foreach (var block in document.Blocks)
+            ApplyListFormatting(block, factor, isNested: false);
+    }
+
+    private static void ApplyListFormatting(Block block, double factor, bool isNested)
+    {
+        switch (block)
+        {
+            case List list:
+                FormatList(list, factor, isNested);
+                break;
+            case Section section:
+                foreach (var child in section.Blocks)
+                    ApplyListFormatting(child, factor, isNested);
+                break;
+        }
+    }
+
+    private static void FormatList(List list, double factor, bool isNested)
+    {
+        var fontSize = DocumentCodec.BodyFontSize;
+        // One shared gap for siblings and main→sub-list (avoids the Tab jitter from oversized then corrected margins).
+        var gap = Math.Max(0, fontSize * (factor - 1));
+
+        // Top-level: no left margin so markers share the body-text left edge; padding
+        // reserves room for multi-digit markers. Nested lists indent via Margin.Left.
+        list.Margin = new Thickness(
+            isNested ? DocumentCodec.ListNestedLeftMargin : DocumentCodec.ListTopLevelLeftMargin,
+            isNested ? gap : 0,
+            0,
+            0);
+        list.Padding = new Thickness(
+            isNested ? DocumentCodec.ListContentPadding : DocumentCodec.ListTopLevelContentPadding,
+            0,
+            0,
+            0);
+        list.MarkerOffset = DocumentCodec.ListMarkerOffset;
+
+        var items = list.ListItems.ToList();
+        for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            var isLast = i == items.Count - 1;
+            item.Margin = new Thickness(0, 0, 0, isLast ? 0 : gap);
+            item.Padding = new Thickness(0);
+
+            var blocks = item.Blocks.ToList();
+            for (var b = 0; b < blocks.Count; b++)
+            {
+                switch (blocks[b])
+                {
+                    case Paragraph paragraph:
+                        var nextIsList = b + 1 < blocks.Count && blocks[b + 1] is List;
+                        SetParagraphLineSpacing(paragraph, factor, addBlockGap: !nextIsList);
+                        break;
+                    case List nested:
+                        FormatList(nested, factor, isNested: true);
+                        break;
+                }
+            }
+        }
+    }
+
+    private static void NormalizeListIndent(FlowDocument? document) =>
+        ApplyListFormatting(document, DocumentCodec.DefaultLineSpacing);
+
+    private IEnumerable<Paragraph> GetTargetParagraphs()
+    {
+        if (Editor?.Document is null) yield break;
+        if (!Editor.Selection.IsEmpty)
+        {
+            foreach (var paragraph in EnumerateParagraphs(Editor.Document))
+            {
+                if (OverlapsSelection(paragraph))
+                    yield return paragraph;
+            }
+            yield break;
+        }
+
+        var caretParagraph = Editor.CaretPosition.Paragraph;
+        if (caretParagraph is not null)
+        {
+            yield return caretParagraph;
+            yield break;
+        }
+
+        foreach (var paragraph in EnumerateParagraphs(Editor.Document))
+            yield return paragraph;
+    }
+
+    private bool OverlapsSelection(Paragraph paragraph)
+    {
+        var start = Editor.Selection.Start;
+        var end = Editor.Selection.End;
+        return paragraph.ContentStart.CompareTo(end) < 0 && paragraph.ContentEnd.CompareTo(start) > 0;
+    }
+
+    private static IEnumerable<Paragraph> EnumerateParagraphs(FlowDocument document)
+    {
+        foreach (var block in document.Blocks)
+        foreach (var paragraph in EnumerateParagraphs(block))
+            yield return paragraph;
+    }
+
+    private static IEnumerable<Paragraph> EnumerateParagraphs(Block block)
+    {
+        switch (block)
+        {
+            case Paragraph paragraph:
+                yield return paragraph;
+                break;
+            case List list:
+                foreach (var item in list.ListItems)
+                foreach (var child in item.Blocks)
+                foreach (var paragraph in EnumerateParagraphs(child))
+                    yield return paragraph;
+                break;
+            case Section section:
+                foreach (var child in section.Blocks)
+                foreach (var paragraph in EnumerateParagraphs(child))
+                    yield return paragraph;
+                break;
+        }
+    }
+
+    private static IEnumerable<List> EnumerateLists(FlowDocument document)
+    {
+        foreach (var block in document.Blocks)
+        foreach (var list in EnumerateLists(block))
+            yield return list;
+    }
+
+    private static IEnumerable<List> EnumerateLists(Block block)
+    {
+        switch (block)
+        {
+            case List list:
+                yield return list;
+                foreach (var item in list.ListItems)
+                foreach (var child in item.Blocks)
+                foreach (var nested in EnumerateLists(child))
+                    yield return nested;
+                break;
+            case Section section:
+                foreach (var child in section.Blocks)
+                foreach (var nested in EnumerateLists(child))
+                    yield return nested;
+                break;
+        }
+    }
 
     private void Link_Click(object sender, RoutedEventArgs e)
     {
@@ -185,11 +484,62 @@ public partial class RichTextEditor : UserControl
                     }
                 }
             }
+
+            SyncLineSpacingToolbar(box);
         }
         finally
         {
             _syncingToolbar = false;
         }
+    }
+
+    private void SyncLineSpacingToolbar(RichTextBox box)
+    {
+        if (LineSpacingBox is null) return;
+        var paragraph = box.CaretPosition?.Paragraph ?? box.Selection.Start.Paragraph;
+        if (paragraph is null) return;
+        var fontSize = paragraph.FontSize;
+        if (double.IsNaN(fontSize) || fontSize < 1)
+            fontSize = DocumentCodec.BodyFontSize;
+        var lineHeight = paragraph.LineHeight;
+        var factor = double.IsNaN(lineHeight) || lineHeight < 1
+            ? DocumentCodec.DefaultLineSpacing
+            : Math.Round(lineHeight / fontSize, 2);
+        foreach (ComboBoxItem item in LineSpacingBox.Items)
+        {
+            if (!TryParseLineSpacing(item, out var option)) continue;
+            if (Math.Abs(option - factor) < 0.05)
+            {
+                LineSpacingBox.SelectedItem = item;
+                return;
+            }
+        }
+        LineSpacingBox.SelectedIndex = 0;
+    }
+
+    private void Editor_OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (Editor is null || !Editor.IsKeyboardFocusWithin) return;
+        var scrollViewer = FindScrollViewer(Editor);
+        if (scrollViewer is null) return;
+
+        var offset = scrollViewer.VerticalOffset - (e.Delta / 3d);
+        offset = Math.Max(0, Math.Min(offset, scrollViewer.ScrollableHeight));
+        scrollViewer.ScrollToVerticalOffset(offset);
+        e.Handled = true;
+    }
+
+    private static ScrollViewer? FindScrollViewer(DependencyObject root)
+    {
+        if (root is ScrollViewer direct) return direct;
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            var found = FindScrollViewer(child);
+            if (found is not null) return found;
+        }
+        return null;
     }
 
     private void Editor_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)

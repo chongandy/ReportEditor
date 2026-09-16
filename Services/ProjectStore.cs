@@ -9,6 +9,7 @@ public class ProjectStore
     private readonly string _lastPathFile;
     private readonly object _gate = new();
     private List<Project> _projects = [];
+    private List<TodoItem> _todos = [];
 
     public ProjectStore()
     {
@@ -30,6 +31,14 @@ public class ProjectStore
         get
         {
             lock (_gate) return _projects.ToList();
+        }
+    }
+
+    public IReadOnlyList<TodoItem> Todos
+    {
+        get
+        {
+            lock (_gate) return _todos.ToList();
         }
     }
 
@@ -61,8 +70,20 @@ public class ProjectStore
         lock (_gate)
         {
             var removed = _projects.RemoveAll(p => p.Id == id) > 0;
-            if (removed) Save();
-            return removed;
+            if (!removed) return false;
+            foreach (var todo in _todos.Where(t => t.ProjectId == id))
+                todo.ProjectId = "";
+            Save();
+            return true;
+        }
+    }
+
+    public void ReplaceTodos(IEnumerable<TodoItem> todos)
+    {
+        lock (_gate)
+        {
+            _todos = todos.Select(CloneTodo).ToList();
+            Save();
         }
     }
 
@@ -71,6 +92,7 @@ public class ProjectStore
         lock (_gate)
         {
             _projects = [];
+            _todos = [];
             SetPath(path);
             Save();
         }
@@ -81,13 +103,12 @@ public class ProjectStore
         if (!File.Exists(path))
             throw new FileNotFoundException("Project.json was not found.", path);
 
-        var json = File.ReadAllText(path);
-        var loaded = JsonSerializer.Deserialize(json, ProjectJsonContext.Default.ListProject)
-            ?? throw new InvalidDataException("The file is not a valid Project.json list.");
+        var (projects, todos) = ReadWorkspace(path);
 
         lock (_gate)
         {
-            _projects = loaded;
+            _projects = projects;
+            _todos = todos;
             SetPath(path);
         }
     }
@@ -104,8 +125,9 @@ public class ProjectStore
     private void Load()
     {
         if (!File.Exists(FilePath)) return;
-        var json = File.ReadAllText(FilePath);
-        _projects = JsonSerializer.Deserialize(json, ProjectJsonContext.Default.ListProject) ?? [];
+        var (projects, todos) = ReadWorkspace(FilePath);
+        _projects = projects;
+        _todos = todos;
     }
 
     private void Save()
@@ -113,9 +135,39 @@ public class ProjectStore
         var directory = Path.GetDirectoryName(FilePath);
         if (!string.IsNullOrWhiteSpace(directory))
             Directory.CreateDirectory(directory);
-        var json = JsonSerializer.Serialize(_projects, ProjectJsonContext.Default.ListProject);
+        var document = new WorkspaceDocument
+        {
+            Projects = _projects,
+            Todos = _todos,
+        };
+        var json = JsonSerializer.Serialize(document, ProjectJsonContext.Default.WorkspaceDocument);
         File.WriteAllText(FilePath, json);
     }
+
+    private static (List<Project> Projects, List<TodoItem> Todos) ReadWorkspace(string path)
+    {
+        var json = File.ReadAllText(path);
+        var trimmed = json.TrimStart();
+        if (trimmed.StartsWith('['))
+        {
+            var legacy = JsonSerializer.Deserialize(json, ProjectJsonContext.Default.ListProject) ?? [];
+            return (legacy, []);
+        }
+
+        var document = JsonSerializer.Deserialize(json, ProjectJsonContext.Default.WorkspaceDocument)
+            ?? throw new InvalidDataException("The file is not a valid Project.json workspace.");
+        return (document.Projects ?? [], document.Todos ?? []);
+    }
+
+    private static TodoItem CloneTodo(TodoItem item) => new()
+    {
+        Id = item.Id,
+        Task = item.Task,
+        ProjectId = item.ProjectId,
+        Priority = item.Priority,
+        DueDate = item.DueDate,
+        Status = item.Status,
+    };
 
     private void SetPath(string path)
     {
